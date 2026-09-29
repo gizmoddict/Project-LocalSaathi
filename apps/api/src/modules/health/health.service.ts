@@ -8,11 +8,14 @@ import {
   ReadinessResponse,
   DependencyHealth,
 } from '@localsaathi/types';
+import { PrismaService } from '@localsaathi/database';
 import { getApiConfig } from '../../config/env.config';
 
 @Injectable()
 export class HealthService {
   private readonly startTime = Date.now();
+
+  constructor(private readonly prisma: PrismaService) {}
 
   getHealthSummary(): HealthSummaryResponse {
     const config = getApiConfig();
@@ -38,7 +41,7 @@ export class HealthService {
     const config = getApiConfig();
 
     const [dbHealth, redisHealth, opensearchHealth] = await Promise.all([
-      this.checkDatabase(config.DB_HOST, config.DB_PORT),
+      this.checkDatabase(),
       this.checkRedis(config.REDIS_HOST, config.REDIS_PORT),
       this.checkOpenSearch(config.OPENSEARCH_URL),
     ]);
@@ -96,12 +99,16 @@ export class HealthService {
     });
   }
 
-  private async checkDatabase(host: string, port: number): Promise<DependencyHealth> {
+  private async checkDatabase(): Promise<DependencyHealth> {
     const config = getApiConfig();
-    if (!config.DATABASE_URL && (!host || !port)) {
+    if (!config.DATABASE_URL) {
       return { status: 'not_configured' };
     }
-    return this.checkTcpSocket(host, port);
+    const check = await this.prisma.checkConnection();
+    if (check.isHealthy) {
+      return { status: 'ok', latencyMs: check.latencyMs };
+    }
+    return { status: 'down', message: check.error || 'Database connection failed' };
   }
 
   private async checkRedis(host: string, port: number): Promise<DependencyHealth> {

@@ -70,6 +70,7 @@ Built to scale to **100,000+ registered workers**, **10,000+ daily active users*
 │   └── worker/     # BullMQ Async Queue Worker Bootstrap (Redis)
 │
 ├── packages/
+│   ├── database/   # PostgreSQL + PostGIS Prisma ORM layer, migrations & spatial queries
 │   ├── ui/         # Accessible UI Component System (Button, Input, Card)
 │   ├── types/      # Shared domain-independent interfaces & API envelopes
 │   ├── validation/ # Shared Zod schemas (Phone, UUID, Env, Coordinates)
@@ -81,7 +82,7 @@ Built to scale to **100,000+ registered workers**, **10,000+ daily active users*
 │   ├── redis/      # Redis server configuration
 │   └── opensearch/ # OpenSearch single-node configuration
 │
-├── docs/           # Architecture diagrams, API specs, and ADRs
+├── docs/           # Architecture diagrams, API specs, and database ADRs
 ├── docker-compose.yml
 ├── turbo.json
 └── package.json
@@ -91,11 +92,13 @@ Built to scale to **100,000+ registered workers**, **10,000+ daily active users*
 
 ## Prerequisites & Tooling
 
-| Requirement | Minimum Version | Verified Host Version |
+| Requirement | Minimum Version | Notes |
 | :--- | :--- | :--- |
-| **Node.js** | `>= 20.0.0` | `v24.11.1` |
-| **npm** | `>= 10.0.0` | `11.6.2` |
-| **Git** | `>= 2.30.0` | `2.55.0` |
+| **Node.js** | `>= 20.0.0` | Verified on `v24.11.1` |
+| **npm** | `>= 10.0.0` | Verified on `11.6.2` |
+| **Git** | `>= 2.30.0` | Verified on `2.55.0` |
+| **PostgreSQL** | `>= 16.0` | Transactional source of truth |
+| **PostGIS** | `>= 3.4` | Spatial extensions enabled (`postgis`) |
 | **Turborepo** | `^2.4.4` | Workspace Orchestrator |
 
 > **Windows PowerShell Execution Policy Note:**  
@@ -146,6 +149,17 @@ npm.cmd run dev
 | `npm.cmd run lint` | Runs ESLint across all workspaces |
 | `npm.cmd run format` | Auto-formats code using Prettier rules |
 | `npm.cmd run clean` | Cleans build caches, `.next`, and `dist` directories |
+
+---
+
+## Database Operations (@localsaathi/database)
+
+| Command | Action |
+| :--- | :--- |
+| `npm.cmd run generate --workspace=@localsaathi/database` | Regenerates Prisma Client types from `schema.prisma` |
+| `npm.cmd run migrate:deploy --workspace=@localsaathi/database` | Applies pending PostgreSQL + PostGIS migrations |
+| `npm.cmd run seed --workspace=@localsaathi/database` | Populates realistic development skills, workers, employers & jobs |
+| `npm.cmd run test:integration --workspace=@localsaathi/database` | Executes real database integration test suite against PostgreSQL |
 
 ---
 
