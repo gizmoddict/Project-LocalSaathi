@@ -1,0 +1,13 @@
+cluster.name: localsaathi-search-cluster
+node.name: localsaathi-node-1
+discovery.type: single-node
+network.host: 0.0.0.0
+http.port: 9200
+
+# Security plugin settings for local development
+plugins.security.disabled: true
+plugins.security.ssl.http.enabled: false
+plugins.security.ssl.transport.enabled: false
+
+# Memory limits for dev
+indices.query.bool.max_clause_count: 1024

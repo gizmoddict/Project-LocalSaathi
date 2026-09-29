@@ -1,0 +1,45 @@
+# ==============================================================================
+# LocalSaathi BullMQ Worker Multi-Stage Dockerfile
+# ==============================================================================
+
+# --- Stage 1: Build & Compile ---
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
+
+COPY package.json package-lock.json* turbo.json tsconfig.json ./
+COPY apps/worker/package.json ./apps/worker/package.json
+COPY packages/config/package.json ./packages/config/package.json
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/validation/package.json ./packages/validation/package.json
+
+RUN npm ci
+
+COPY apps/worker ./apps/worker
+COPY packages/config ./packages/config
+COPY packages/types ./packages/types
+COPY packages/validation ./packages/validation
+
+RUN npx turbo run build --filter=@localsaathi/worker...
+
+# --- Stage 2: Production Runtime ---
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 worker
+
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
+COPY --from=builder /app/apps/worker/package.json ./apps/worker/package.json
+
+USER worker
+
+CMD ["node", "apps/worker/dist/index.js"]

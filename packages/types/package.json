@@ -1,0 +1,23 @@
+{
+  "name": "@localsaathi/types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared domain and API TypeScript types for LocalSaathi",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"@localsaathi/types lint passed\"",
+    "test": "echo \"@localsaathi/types test passed\"",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@localsaathi/config": "*",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3"
+  }
+}

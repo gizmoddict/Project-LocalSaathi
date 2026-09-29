@@ -1,0 +1,83 @@
+# ==============================================================================
+# LocalSaathi Local Development Infrastructure (Docker Compose)
+# Services: PostgreSQL + PostGIS, Redis, OpenSearch
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # --- Primary Database (PostgreSQL 16 with PostGIS 3.4) ---
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: localsaathi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: localsaathi_db
+      POSTGRES_USER: localsaathi_admin
+      POSTGRES_PASSWORD: localsaathi_dev_password
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-postgis.sh:/docker-entrypoint-initdb.d/init-postgis.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U localsaathi_admin -d localsaathi_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - localsaathi-network
+
+  # --- Cache & Task Queue (Redis 7.2 Alpine) ---
+  redis:
+    image: redis:7.2-alpine
+    container_name: localsaathi-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: ['redis-server', '/usr/local/etc/redis/redis.conf']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - localsaathi-network
+
+  # --- Search Engine (OpenSearch 2.18) ---
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    container_name: localsaathi-opensearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - '9200:9200'
+      - '9600:9600'
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+      - ./infra/opensearch/opensearch.yml:/usr/share/opensearch/config/opensearch.yml
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:9200/_cluster/health || exit 1']
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - localsaathi-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  opensearch_data:
+    driver: local
+
+networks:
+  localsaathi-network:
+    driver: bridge
