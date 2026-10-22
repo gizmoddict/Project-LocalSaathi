@@ -272,3 +272,4 @@ If Docker is not installed on the host machine:
 - **Strict Dependency Boundaries**: Cross-app imports (`apps/web` ➔ `apps/api`) are forbidden. Domain contracts live exclusively in `packages/types` and `packages/validation`.
 - **Structured JSON Logging**: Every HTTP request receives an `X-Request-Id` correlation UUID, logs duration, status code, and automatically redacts tokens, OTPs, and passwords.
 - **Centralized Error Envelope**: Consistent `{ success: false, error: { code, message }, requestId }` response format without exposing internal stack traces.
+"# Project-LocalSaathi" 
