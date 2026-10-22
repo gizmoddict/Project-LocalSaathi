@@ -1,0 +1,12 @@
+{
+  "application": "LocalSaathi",
+  "version": "0.1.0",
+  "environment": "production",
+  "commitSha": "f60a231bfd1adc55b065153dc3c2148969869446",
+  "branch": "master",
+  "lockfileHash": "7aac60f396ebd751f084a325e371adf06affa5a627d157f2c321bb35ae583f0f",
+  "buildTimestamp": "2026-10-06T19:27:28.636Z",
+  "nodeVersion": "v24.11.1",
+  "platform": "win32",
+  "arch": "x64"
+}

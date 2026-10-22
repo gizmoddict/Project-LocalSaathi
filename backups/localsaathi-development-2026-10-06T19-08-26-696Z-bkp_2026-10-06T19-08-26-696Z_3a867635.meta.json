@@ -1,0 +1,26 @@
+{
+  "backupId": "bkp_2026-10-06T19-08-26-696Z_3a867635",
+  "timestamp": "2026-10-06T19:08:30.828Z",
+  "environment": "development",
+  "backupType": "LOGICAL_FULL",
+  "format": "JSON_PORTABLE",
+  "filePath": "P:\\Project Localsaathi\\backups\\localsaathi-development-2026-10-06T19-08-26-696Z-bkp_2026-10-06T19-08-26-696Z_3a867635.dump.json",
+  "fileSizeBytes": 1369,
+  "checksumSha256": "0e0995ccb058bedb820a02dd47536142dd34554b22f426fa0ca2ae2c69ba282c",
+  "isEncrypted": false,
+  "tableCounts": {
+    "users": 1,
+    "workerProfiles": 1,
+    "employerProfiles": 0,
+    "jobs": 1,
+    "applications": 1,
+    "bookings": 1,
+    "payments": 1,
+    "refunds": 0,
+    "outboxEvents": 1,
+    "auditLogs": 1
+  },
+  "durationMs": 4132,
+  "verificationStatus": "VERIFIED",
+  "verifiedAt": "2026-10-11T18:55:44.173Z"
+}

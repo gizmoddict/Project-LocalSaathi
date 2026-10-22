@@ -1,0 +1,62 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1,
+    "analysis": {
+      "analyzer": {
+        "autocomplete_analyzer": {
+          "type": "custom",
+          "tokenizer": "autocomplete_tokenizer",
+          "filter": ["lowercase"]
+        }
+      },
+      "tokenizer": {
+        "autocomplete_tokenizer": {
+          "type": "edge_ngram",
+          "min_gram": 2,
+          "max_gram": 15,
+          "token_chars": ["letter", "digit"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "userId": { "type": "keyword" },
+      "displayName": {
+        "type": "text",
+        "fields": {
+          "keyword": { "type": "keyword" },
+          "autocomplete": {
+            "type": "text",
+            "analyzer": "autocomplete_analyzer",
+            "search_analyzer": "standard"
+          }
+        }
+      },
+      "bio": { "type": "text" },
+      "experienceYears": { "type": "integer" },
+      "expectedWage": { "type": "double" },
+      "wageType": { "type": "keyword" },
+      "preferredRadiusKm": { "type": "integer" },
+      "isAvailable": { "type": "boolean" },
+      "completedJobsCount": { "type": "integer" },
+      "avgRating": { "type": "float" },
+      "reliabilityScore": { "type": "float" },
+      "location": { "type": "geo_point" },
+      "locality": {
+        "type": "text",
+        "fields": {
+          "keyword": { "type": "keyword" }
+        }
+      },
+      "city": { "type": "keyword" },
+      "state": { "type": "keyword" },
+      "pinCode": { "type": "keyword" },
+      "skillIds": { "type": "keyword" },
+      "languages": { "type": "keyword" },
+      "updatedAt": { "type": "date" }
+    }
+  }
+}

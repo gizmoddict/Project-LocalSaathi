@@ -14,6 +14,7 @@
     "clean": "rimraf dist *.tsbuildinfo"
   },
   "dependencies": {
+    "@localsaathi/database": "*",
     "@localsaathi/types": "*",
     "@localsaathi/validation": "*",
     "bullmq": "^5.34.4",

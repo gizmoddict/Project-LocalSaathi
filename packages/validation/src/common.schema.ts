@@ -21,9 +21,9 @@ export const phoneNumberSchema = z
     { message: 'Invalid phone number. Must be a valid 10-digit Indian mobile number.' }
   )
   .transform((val) => {
-    // Normalize to standard 10-digit format
-    const cleaned = val.replace(/^\+?91/, '');
-    return cleaned;
+    if (val.startsWith('+91')) return val.slice(3);
+    if (val.length === 12 && val.startsWith('91')) return val.slice(2);
+    return val;
   });
 
 /**

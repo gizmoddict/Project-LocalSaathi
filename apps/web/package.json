@@ -9,17 +9,20 @@
     "start": "next start -p 3000",
     "lint": "next lint || echo \"lint passed\"",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"@localsaathi/web test passed\"",
+    "test": "node -e \"process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({module: 'commonjs'}); require('ts-node/register'); require('./test/interactive-map-flow.test.ts'); require('./test/multilingual-i18n.test.ts');\"",
     "clean": "rimraf .next dist *.tsbuildinfo"
   },
   "dependencies": {
     "@localsaathi/types": "*",
     "@localsaathi/ui": "*",
     "@localsaathi/validation": "*",
+    "@types/leaflet": "^1.9.22",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.469.0",
     "next": "^14.2.24",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@localsaathi/config": "*",

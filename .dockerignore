@@ -1,0 +1,60 @@
+# ==============================================================================
+# LocalSaathi Production .dockerignore
+# Strictly excludes developer state, secrets, git, and local build artifacts
+# ==============================================================================
+
+# Git & Version Control
+.git
+.gitignore
+.gitattributes
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Local Dependencies & Caches
+node_modules
+.npm
+.pnpm-store
+.yarn
+.turbo
+
+# Build Artifacts & Transpiled Code
+dist
+build
+.next
+out
+*.tsbuildinfo
+
+# Test Coverage & Logs
+coverage
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+junit.xml
+test-results
+
+# Database Dumps & Backups
+backups/
+*.dump.json
+*.dump.enc
+*.sql
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+*.swp
+*.swo
+
+# Documentation & Scratch Files
+docs/
+scratch/
+.agents/

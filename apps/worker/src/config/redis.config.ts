@@ -15,10 +15,19 @@ export function getRedisConnectionOptions(): RedisOptions {
   const config = getWorkerConfig();
 
   if (config.REDIS_URL) {
-    return {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
-    };
+    try {
+      const parsed = new URL(config.REDIS_URL);
+      return {
+        host: parsed.hostname || '127.0.0.1',
+        port: parseInt(parsed.port || '6379', 10),
+        password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+        username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+      };
+    } catch {
+      // Fallback if URL parsing fails
+    }
   }
 
   return {

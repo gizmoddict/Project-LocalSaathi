@@ -1,5 +1,6 @@
 # ==============================================================================
-# LocalSaathi BullMQ Worker Multi-Stage Dockerfile
+# LocalSaathi BullMQ Worker Multi-Stage Production Dockerfile
+# Non-Root, Minimal Runtime, Graceful SIGTERM via dumb-init for queue draining
 # ==============================================================================
 
 # --- Stage 1: Build & Compile ---
@@ -7,21 +8,31 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat
+# Install build dependencies & OpenSSL for Prisma engine
+RUN apk add --no-cache libc6-compat openssl
 
-COPY package.json package-lock.json* turbo.json tsconfig.json ./
+# Copy root configurations and package manifests
+COPY package.json package-lock.json turbo.json tsconfig.json ./
 COPY apps/worker/package.json ./apps/worker/package.json
 COPY packages/config/package.json ./packages/config/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/validation/package.json ./packages/validation/package.json
+COPY packages/database/package.json ./packages/database/package.json
 
+# Install dependencies deterministically
 RUN npm ci
 
+# Copy source code
 COPY apps/worker ./apps/worker
 COPY packages/config ./packages/config
 COPY packages/types ./packages/types
 COPY packages/validation ./packages/validation
+COPY packages/database ./packages/database
 
+# Generate Prisma Client for database persistence
+RUN npx prisma generate --schema=./packages/database/prisma/schema.prisma
+
+# Build worker dependencies and application
 RUN npx turbo run build --filter=@localsaathi/worker...
 
 # --- Stage 2: Production Runtime ---
@@ -31,15 +42,22 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install dumb-init for signal handling (SIGTERM -> queue draining) & OpenSSL
+RUN apk add --no-cache dumb-init openssl
+
+# Create non-root system user and group
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 worker
 
+# Copy built package artifacts and dependencies from builder
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
-COPY --from=builder /app/apps/worker/package.json ./apps/worker/package.json
+COPY --from=builder /app/apps/worker ./apps/worker
 
+# Enforce non-root execution
 USER worker
 
+# Entrypoint with dumb-init for clean SIGTERM queue draining
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "apps/worker/dist/index.js"]

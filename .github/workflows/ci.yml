@@ -1,0 +1,97 @@
+name: LocalSaathi Continuous Integration (CI)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    name: Lint, Typecheck, Test, DR Suite & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: localsaathi_test_db
+          POSTGRES_USER: localsaathi_test_user
+          POSTGRES_PASSWORD: localsaathi_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=packages/database/prisma/schema.prisma
+
+      - name: Quality Gate 1: Code Linting
+        run: npm run lint
+
+      - name: Quality Gate 2: TypeScript Typechecking
+        run: npm run typecheck
+
+      - name: Quality Gate 3: Unit & Resilience & Observability Tests
+        run: npm run test
+        env:
+          DATABASE_URL: postgresql://localsaathi_test_user:localsaathi_test_password@localhost:5432/localsaathi_test_db?schema=public
+          REDIS_URL: redis://localhost:6379/0
+
+      - name: Quality Gate 4: Disaster Recovery & Continuity Drill Suite
+        run: node scripts/test-dr-suite.js
+
+      - name: Quality Gate 5: Configuration Validation Test
+        run: node scripts/deploy/config-validator-test.js
+
+      - name: Quality Gate 6: Secret Leakage Audit
+        run: node scripts/deploy/secret-leak-test.js
+
+      - name: Quality Gate 7: Production Monorepo Build
+        run: npm run build
+
+      - name: Quality Gate 8: Generate Traceable Release Metadata
+        run: node scripts/deploy/generate-release-metadata.js
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          BRANCH_NAME: ${{ github.ref_name }}
+
+      - name: Upload Release Metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: release-metadata.json
+          retention-days: 14

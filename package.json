@@ -15,7 +15,20 @@
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "db:backup": "node scripts/dr/backup.js",
+    "db:backup:verify": "node scripts/dr/verify-backup.js",
+    "db:restore": "node scripts/dr/restore.js",
+    "db:backup:list": "node scripts/dr/list-backups.js",
+    "db:backup:cleanup": "node scripts/dr/cleanup-backups.js",
+    "db:integrity": "node -e \"const {runIntegrityAudit} = require('./scripts/dr/integrity-checker'); console.log(JSON.stringify(runIntegrityAudit({}), null, 2))\"",
+    "db:migration:safety": "node scripts/dr/migration-safety.js",
+    "deploy:metadata": "node scripts/deploy/generate-release-metadata.js",
+    "deploy:validate-config": "node scripts/deploy/config-validator-test.js",
+    "deploy:secret-leak-test": "node scripts/deploy/secret-leak-test.js",
+    "deploy:smoke-test": "node scripts/deploy/smoke-test.js",
+    "staging:verify": "node scripts/staging/staging-e2e-suite.js",
+    "staging:boundary-test": "node scripts/staging/boundary-isolation-test.js"
   },
   "devDependencies": {
     "prettier": "^3.5.3",
@@ -27,5 +40,11 @@
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
-  "packageManager": "npm@11.6.2"
+  "packageManager": "npm@11.6.2",
+  "dependencies": {
+    "@nestjs/platform-socket.io": "^10.4.15",
+    "@nestjs/websockets": "^10.4.15",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  }
 }

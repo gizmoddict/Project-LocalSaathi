@@ -3,8 +3,6 @@
 # Services: PostgreSQL + PostGIS, Redis, OpenSearch
 # ==============================================================================
 
-version: '3.8'
-
 services:
   # --- Primary Database (PostgreSQL 16 with PostGIS 3.4) ---
   postgres:

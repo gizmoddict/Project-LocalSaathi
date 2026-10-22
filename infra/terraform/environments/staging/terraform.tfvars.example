@@ -1,0 +1,26 @@
+# ==============================================================================
+# LocalSaathi — Staging Terraform Variables Template (NO SECRETS IN REPOSITORY)
+# Inject real values during CI/CD execution via environment variables or Secrets Manager
+# ==============================================================================
+
+aws_region        = "ap-south-1"
+domain_name       = "staging.localsaathi.com"
+bucket_suffix     = "stg-01"
+release_tag       = "v0.1.0-staging"
+
+# Database & Cache Sizing (Staging Cost-Optimized)
+db_instance_class = "db.t4g.medium"
+redis_node_type   = "cache.t4g.medium"
+
+# Staging Secret Placeholders (Inject securely via TF_VAR_*)
+db_name           = "localsaathi_staging"
+db_username       = "localsaathi_staging_admin"
+db_password       = "REPLACE_WITH_SECURE_STAGING_DB_PASSWORD"
+redis_auth_token  = "REPLACE_WITH_SECURE_STAGING_REDIS_AUTH_TOKEN"
+
+jwt_access_secret  = "REPLACE_WITH_SECURE_STAGING_JWT_ACCESS_SECRET"
+jwt_refresh_secret = "REPLACE_WITH_SECURE_STAGING_JWT_REFRESH_SECRET"
+auth_pepper        = "REPLACE_WITH_SECURE_STAGING_AUTH_PEPPER"
+
+razorpay_key_id     = "rzp_test_placeholder"
+razorpay_key_secret = "razorpay_staging_secret_placeholder"

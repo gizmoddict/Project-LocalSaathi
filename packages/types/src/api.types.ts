@@ -8,6 +8,14 @@ export interface ApiResponse<T = unknown> {
   timestamp: string;
 }
 
+export interface PaginationMetadata {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+}
+
 /**
  * Standard API Error Detail.
  */
@@ -88,3 +96,16 @@ export interface ReadinessResponse {
   };
   timestamp: string;
 }
+
+/**
+ * Traceable release metadata response (Phase 24 Section 28).
+ */
+export interface ReleaseMetadataResponse {
+  version: string;
+  environment: string;
+  commitSha: string;
+  buildTimestamp: string;
+  nodeVersion: string;
+  uptimeSeconds: number;
+}
+

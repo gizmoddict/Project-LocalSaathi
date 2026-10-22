@@ -170,3 +170,106 @@ export async function findJobsNearWorker(
 
   return results;
 }
+
+export interface NearbySkilledWorkerResult extends NearbyWorkerResult {
+  matchingSkillCount: number;
+}
+
+/**
+ * 5. Find workers with matching skills near a job.
+ * Joins required job skills with worker skills and applies spatial ST_DWithin.
+ */
+export async function findWorkersWithSkillsNearJob(
+  prisma: PrismaClient,
+  jobPostId: string,
+  radiusMeters = 15000,
+  limit = 50
+): Promise<NearbySkilledWorkerResult[]> {
+  const results = await prisma.$queryRaw<NearbySkilledWorkerResult[]>`
+    SELECT 
+      wp.id AS "workerProfileId",
+      wp.display_name AS "displayName",
+      ST_Distance(wl.location, jl.location) AS "distanceMeters",
+      wl.latitude AS "latitude",
+      wl.longitude AS "longitude",
+      wp.avg_rating::float AS "avgRating",
+      wp.reliability_score::float AS "reliabilityScore",
+      COUNT(ws.skill_id)::int AS "matchingSkillCount"
+    FROM job_locations jl
+    CROSS JOIN worker_locations wl
+    JOIN worker_profiles wp ON wp.id = wl.worker_profile_id
+    JOIN worker_skills ws ON ws.worker_profile_id = wp.id
+    JOIN job_required_skills jrs ON jrs.job_post_id = jl.job_post_id AND jrs.skill_id = ws.skill_id
+    WHERE jl.job_post_id = ${jobPostId}::uuid
+      AND wl.is_active = true
+      AND wp.is_available = true
+      AND ST_DWithin(wl.location, jl.location, ${radiusMeters})
+    GROUP BY wp.id, wp.display_name, wl.location, jl.location, wl.latitude, wl.longitude, wp.avg_rating, wp.reliability_score
+    ORDER BY "matchingSkillCount" DESC, "distanceMeters" ASC
+    LIMIT ${limit};
+  `;
+
+  return results;
+}
+
+/**
+ * 6. Find available workers for a given day.
+ */
+export async function findAvailableWorkers(
+  prisma: PrismaClient,
+  date: Date = new Date(),
+  limit = 50
+) {
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  return prisma.workerProfile.findMany({
+    where: {
+      isAvailable: true,
+      availabilities: {
+        some: {
+          date: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+          status: 'AVAILABLE',
+        },
+      },
+    },
+    include: {
+      availabilities: true,
+      workerSkills: {
+        include: { skill: true },
+      },
+    },
+    take: limit,
+  });
+}
+
+/**
+ * 7. Find recently posted published jobs.
+ */
+export async function findRecentlyPostedJobs(
+  prisma: PrismaClient,
+  limit = 20
+) {
+  return prisma.jobPost.findMany({
+    where: {
+      status: 'PUBLISHED',
+    },
+    orderBy: {
+      publishedAt: 'desc',
+    },
+    include: {
+      jobLocation: true,
+      jobRequiredSkills: {
+        include: { skill: true },
+      },
+      employerProfile: true,
+    },
+    take: limit,
+  });
+}
+

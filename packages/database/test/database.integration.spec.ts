@@ -1,8 +1,30 @@
-import { PrismaClient, UserRole, WageType, JobStatus, JobUrgency, AvailabilityStatus, ApplicationStatus, PaymentStatus } from '@prisma/client';
-import * as net from 'net';
-import { findWorkersWithinRadius } from '../src/spatial.queries';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 
-describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
+// Ensure root .env is loaded
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+import {
+  PrismaClient,
+  UserRole,
+  WageType,
+  JobStatus,
+  JobUrgency,
+  AvailabilityStatus,
+  ApplicationStatus,
+  PaymentStatus,
+} from '@prisma/client';
+import * as net from 'net';
+import {
+  findWorkersWithinRadius,
+  findJobsWithinRadius,
+  findWorkersWithSkillsNearJob,
+  findAvailableWorkers,
+  findRecentlyPostedJobs,
+} from '../src/spatial.queries';
+
+describe('LocalSaathi Real Database Integration Tests (Phase 2)', () => {
   let prisma: PrismaClient;
   let isDbAvailable = false;
 
@@ -13,7 +35,7 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
 
     isDbAvailable = await new Promise((resolve) => {
       const socket = new net.Socket();
-      socket.setTimeout(1000);
+      socket.setTimeout(2000);
       socket.on('connect', () => {
         socket.destroy();
         resolve(true);
@@ -33,37 +55,23 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
       }
     });
 
-    if (isDbAvailable) {
-      prisma = new PrismaClient();
-      await prisma.$connect();
-    } else {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '\n[DATABASE INTEGRATION SUITE] PostgreSQL/PostGIS is NOT currently running on port 5432.\n' +
-        'In accordance with Phase 2 engineering rules, real database integration tests are marked as\n' +
-        'NOT EXECUTED rather than using fake mocks to ensure rigorous reporting.\n'
+    if (!isDbAvailable) {
+      throw new Error(
+        `[FATAL] PostgreSQL is NOT available on ${host}:${port}. Real database verification requires live PostgreSQL/PostGIS.`
       );
     }
+
+    prisma = new PrismaClient();
+    await prisma.$connect();
   });
 
   afterAll(async () => {
-    if (isDbAvailable && prisma) {
+    if (prisma) {
       await prisma.$disconnect();
     }
   });
 
-  const itIfDb = (name: string, fn: () => Promise<void>) => {
-    it(name, async () => {
-      if (!isDbAvailable) {
-        // eslint-disable-next-line no-console
-        console.info(`[NOT EXECUTED - DB UNAVAILABLE] ${name}`);
-        return;
-      }
-      await fn();
-    });
-  };
-
-  itIfDb('1. User Creation - persists with role, status, and UUID', async () => {
+  it('1. User Creation - persists with role, status, and UUID', async () => {
     const testPhone = `999${Math.floor(1000000 + Math.random() * 9000000)}`;
     const user = await prisma.user.create({
       data: {
@@ -74,9 +82,10 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     expect(user.id).toBeDefined();
     expect(user.phone).toBe(testPhone);
     expect(user.role).toBe(UserRole.WORKER);
+    expect(user.accountStatus).toBe('ACTIVE');
   });
 
-  itIfDb('2. Worker Profile - associates with user and verifies wage decimal', async () => {
+  it('2. Worker Profile - associates with user and verifies wage decimal', async () => {
     const user = await prisma.user.create({
       data: {
         phone: `998${Math.floor(1000000 + Math.random() * 9000000)}`,
@@ -94,9 +103,10 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     });
     expect(user.workerProfile).toBeDefined();
     expect(Number(user.workerProfile?.expectedWage)).toBe(750.50);
+    expect(user.workerProfile?.displayName).toBe('Amit Test Plumber');
   });
 
-  itIfDb('3. Employer Profile - associates with user and verifies company fields', async () => {
+  it('3. Employer Profile - associates with user and verifies company fields', async () => {
     const user = await prisma.user.create({
       data: {
         phone: `997${Math.floor(1000000 + Math.random() * 9000000)}`,
@@ -111,13 +121,27 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
       include: { employerProfile: true },
     });
     expect(user.employerProfile?.businessName).toBe('Apex City Constructors');
+    expect(user.employerProfile?.businessType).toBe('Contractor');
   });
 
-  itIfDb('4. Skill Relationships - associates worker with unique skill', async () => {
+  it('4. Skills - creates skill with normalized lowercase slug', async () => {
+    const rand = Math.floor(1000 + Math.random() * 9000);
     const skill = await prisma.skill.create({
       data: {
-        name: `Custom Skill ${Date.now()}`,
-        normalizedName: `custom_skill_${Date.now()}`,
+        name: `Precision Tiling ${rand}`,
+        normalizedName: `precision_tiling_${rand}`,
+        category: 'Construction',
+      },
+    });
+    expect(skill.id).toBeDefined();
+    expect(skill.normalizedName).toBe(`precision_tiling_${rand}`);
+  });
+
+  it('5. Worker Skills - associates worker with unique skill and proficiency', async () => {
+    const skill = await prisma.skill.create({
+      data: {
+        name: `Skill Test ${Date.now()}`,
+        normalizedName: `skill_test_${Date.now()}`,
         category: 'Testing',
       },
     });
@@ -141,15 +165,27 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
       include: { workerProfile: { include: { workerSkills: true } } },
     });
     expect(user.workerProfile?.workerSkills[0]?.skillId).toBe(skill.id);
+    expect(user.workerProfile?.workerSkills[0]?.proficiency).toBe('EXPERT');
+
+    // Duplicate skill on same worker profile must fail
+    await expect(
+      prisma.workerSkill.create({
+        data: {
+          workerProfileId: user.workerProfile!.id,
+          skillId: skill.id,
+          proficiency: 'BEGINNER',
+        },
+      })
+    ).rejects.toThrow();
   });
 
-  itIfDb('5. Job Creation - creates job post with FSM status and urgency', async () => {
+  it('6. Job Creation - creates job post with FSM status and urgency', async () => {
     const empUser = await prisma.user.create({
       data: {
         phone: `995${Math.floor(1000000 + Math.random() * 9000000)}`,
         role: UserRole.EMPLOYER,
         employerProfile: {
-          create: { businessName: 'Quick Repairs' },
+          create: { businessName: 'Quick Repairs Ltd' },
         },
       },
       include: { employerProfile: true },
@@ -172,13 +208,14 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
 
     expect(job.status).toBe(JobStatus.PUBLISHED);
     expect(Number(job.wageAmount)).toBe(1200.00);
+    expect(job.urgency).toBe(JobUrgency.IMMEDIATE);
   });
 
-  itIfDb('6. Job Required Skills - verifies relation and minimum experience', async () => {
+  it('7. Required Job Skills - verifies relation and minimum experience', async () => {
     const skill = await prisma.skill.create({
       data: {
-        name: `Skill Test ${Date.now()}`,
-        normalizedName: `skill_test_${Date.now()}`,
+        name: `Skill Req ${Date.now()}`,
+        normalizedName: `skill_req_${Date.now()}`,
         category: 'General',
       },
     });
@@ -194,7 +231,7 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     const job = await prisma.jobPost.create({
       data: {
         employerProfileId: empUser.employerProfile!.id,
-        title: 'Test Job With Skill',
+        title: 'Test Job With Skill Requirements',
         description: 'Test description',
         category: 'General',
         wageType: WageType.DAILY,
@@ -213,9 +250,10 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
 
     expect(job.jobRequiredSkills.length).toBe(1);
     expect(job.jobRequiredSkills[0]?.minExperienceYears).toBe(2);
+    expect(job.jobRequiredSkills[0]?.isRequired).toBe(true);
   });
 
-  itIfDb('7. Duplicate Application Prevention - enforces unique constraint', async () => {
+  it('8. Duplicate Application Prevention - enforces unique constraint', async () => {
     const emp = await prisma.user.create({
       data: {
         phone: `993${Math.floor(1000000 + Math.random() * 9000000)}`,
@@ -263,7 +301,7 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     ).rejects.toThrow();
   });
 
-  itIfDb('8. Availability - stores date-specific availability schedule', async () => {
+  it('9. Availability - stores date-specific availability schedule', async () => {
     const wkr = await prisma.user.create({
       data: {
         phone: `991${Math.floor(1000000 + Math.random() * 9000000)}`,
@@ -283,9 +321,11 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     });
 
     expect(availability.status).toBe(AvailabilityStatus.AVAILABLE);
+    expect(availability.startTime).toBe('08:00');
+    expect(availability.endTime).toBe('17:00');
   });
 
-  itIfDb('9. Ratings Constraints - prevents duplicate rating for same booking', async () => {
+  it('10. Ratings Constraints - prevents duplicate rating and enforces 1-5 rating range', async () => {
     const emp = await prisma.user.create({
       data: {
         phone: `990${Math.floor(1000000 + Math.random() * 9000000)}`,
@@ -326,6 +366,7 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
       },
     });
 
+    // Valid rating succeeds
     await prisma.rating.create({
       data: {
         reviewerId: emp.id,
@@ -347,9 +388,17 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
         },
       })
     ).rejects.toThrow();
+
+    // Invalid rating > 5 must fail DB check constraint
+    await expect(
+      prisma.$executeRawUnsafe(`
+        INSERT INTO ratings (id, reviewer_id, reviewed_user_id, rating, created_at, updated_at)
+        VALUES (gen_random_uuid(), '${emp.id}', '${wkr.id}', 10, NOW(), NOW());
+      `)
+    ).rejects.toThrow();
   });
 
-  itIfDb('10. Payment Idempotency - rejects duplicate idempotency keys', async () => {
+  it('11. Payment Idempotency - rejects duplicate idempotency keys', async () => {
     const user = await prisma.user.create({
       data: { phone: `988${Math.floor(1000000 + Math.random() * 9000000)}` },
     });
@@ -378,7 +427,7 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     ).rejects.toThrow();
   });
 
-  itIfDb('11. Payment Event Uniqueness - enforces single processing of webhook event ID', async () => {
+  it('12. Payment Event Uniqueness - enforces single processing of webhook event ID', async () => {
     const eventId = `evt_rzp_${Date.now()}_${Math.random()}`;
 
     await prisma.paymentEvent.create({
@@ -403,12 +452,7 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     ).rejects.toThrow();
   });
 
-  itIfDb('12. Spatial Radius Query - retrieves workers within PostGIS range', async () => {
-    const results = await findWorkersWithinRadius(prisma, 26.8500, 80.9480, 5000);
-    expect(Array.isArray(results)).toBe(true);
-  });
-
-  itIfDb('13. Audit Log - records sensitive business mutation immutably', async () => {
+  it('13. Audit Log - records sensitive business mutation immutably', async () => {
     const log = await prisma.auditLog.create({
       data: {
         action: 'WORKER_PROFILE_CREATED',
@@ -422,11 +466,52 @@ describe('LocalSaathi Database Integration Tests (Phase 2)', () => {
     expect(log.action).toBe('WORKER_PROFILE_CREATED');
   });
 
-  it('Infrastructure availability reporter - confirms DB status accurately', () => {
-    expect(typeof isDbAvailable).toBe('boolean');
-    if (!isDbAvailable) {
-      // Confirmed offline: test suite verified the connection test without pretending success
-      expect(isDbAvailable).toBe(false);
-    }
+  it('14. Worker Radius Search - retrieves seeded workers within PostGIS range', async () => {
+    // Hazratganj center coordinates: (26.8500, 80.9480)
+    // Within 3km, Ramesh Kumar (~500m) and Suresh Patel (~2.2km) should be returned
+    const results = await findWorkersWithinRadius(prisma, 26.8500, 80.9480, 3000);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+
+    const first = results[0];
+    expect(first).toBeDefined();
+    expect(first?.distanceMeters).toBeLessThanOrEqual(3000);
+    expect(first?.displayName).toBeDefined();
+  });
+
+  it('15. Job Radius Search - retrieves seeded jobs within PostGIS range', async () => {
+    // Hazratganj center coordinates: (26.8500, 80.9480)
+    // The seeded job is at (26.8520, 80.9500), ~300m away
+    const results = await findJobsWithinRadius(prisma, 26.8500, 80.9480, 2000);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    const targetJob = results.find((r) => r.title === 'Emergency Residential Pipe Replacement');
+    expect(targetJob).toBeDefined();
+    expect(targetJob?.title).toBe('Emergency Residential Pipe Replacement');
+    expect(targetJob?.distanceMeters).toBeLessThan(1000);
+  });
+
+  it('16. Workers with Skills Near a Job - finds skilled workers near job location', async () => {
+    const job = await prisma.jobPost.findFirst({
+      where: { title: 'Emergency Residential Pipe Replacement' },
+    });
+    expect(job).not.toBeNull();
+
+    const skilledWorkers = await findWorkersWithSkillsNearJob(prisma, job!.id, 15000);
+    expect(Array.isArray(skilledWorkers)).toBe(true);
+    expect(skilledWorkers.length).toBeGreaterThanOrEqual(1);
+    expect(skilledWorkers[0]?.displayName).toBe('Ramesh Kumar');
+    expect(skilledWorkers[0]?.matchingSkillCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('17. Available Workers & Recently Posted Jobs - validates operational queries', async () => {
+    const availableWorkers = await findAvailableWorkers(prisma, new Date(), 10);
+    expect(Array.isArray(availableWorkers)).toBe(true);
+    expect(availableWorkers.length).toBeGreaterThanOrEqual(1);
+
+    const recentJobs = await findRecentlyPostedJobs(prisma, 10);
+    expect(Array.isArray(recentJobs)).toBe(true);
+    expect(recentJobs.length).toBeGreaterThanOrEqual(1);
+    expect(recentJobs[0]?.status).toBe('PUBLISHED');
   });
 });

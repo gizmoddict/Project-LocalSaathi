@@ -1,0 +1,34 @@
+# LocalSaathi — Phase 22 Failure Modes & Effects Analysis (FMEA) Matrix
+
+## 1. Overview
+
+This matrix documents the failure modes, blast radius, detection mechanisms, automated resilience mitigations, and recovery strategies across all 13 core dependencies of the LocalSaathi platform.
+
+---
+
+## 2. Comprehensive 13-Dependency Failure Matrix
+
+| ID | Dependency | Failure Mode | Severity | Blast Radius | Detection Mechanism | Automated Mitigation / Defense | Degraded Mode / Fallback | Recovery Mechanism |
+|---|---|---|---|---|---|---|---|---|
+| **D1** | **PostgreSQL Primary** | Connection refused / network partition | CRITICAL | Entire platform read/write APIs | `PrismaClientInitializationError`, Health check `/health` | Retry transient errors up to 3 times with exponential backoff & jitter | Read-only cache where available; API returns `503 Service Unavailable` with `Retry-After` header | Reconnect on network restoration; pool auto-reconnects |
+| **D2** | **PostgreSQL Concurrency** | Deadlocks (`40P01`) / Serialization (`40001`/`P2034`) | HIGH | Concurrent transactions (bookings, payments, matches) | Error code classification via `RetryClassifier` | `PostgresResilienceService.executeTransaction` retries up to 3 times | None needed; transaction retried transparently to user | Completes safely on retry; rejects deterministic errors immediately |
+| **D3** | **PostgreSQL Connection Pool** | Pool exhaustion / waiting client timeout | HIGH | API latency spikes, blocked requests | `db_pool_waiting_requests` metric, query latency > 5000ms | Bounded query timeout (`DB_OPERATION_TIMEOUT_MS = 5000ms`), connection timeouts return 504 | Fast fail with `504 Gateway Timeout`; prevents node process lockup | Queries drain as concurrency drops; pool recovers |
+| **D4** | **Redis Primary (Cache & Locks)** | Redis node down or unroutable | MEDIUM | Caching layer, distributed locks, rate limiting | Connection error logs, `reconnect_attempts_total` metric | Redis commands timeout after 1500ms; seamless fallback to PostgreSQL | Reads fall back directly to PostgreSQL; rate limiting falls back to local in-memory sliding window | Auto-reconnect via `ioredis` with exponential backoff; cache repopulation |
+| **D5** | **BullMQ Queues & Workers** | Queue backlog / Worker crash during job execution | MEDIUM | Asynchronous background jobs, notifications, indexing | Queue depth metrics, delayed jobs count, lock lease expiry | Bounded concurrency per worker; lock TTL expiration allows survivor workers to reclaim jobs | Safe job delay; unrecoverable errors routed directly to DLQ (`dlq_routed_total`) | Survivor workers consume backlog; manual inspection for poison pills in DLQ |
+| **D6** | **Transactional Outbox Engine** | Outbox publisher crash or network timeout | MEDIUM | Event dispatching, asynchronous domain events | `stale_outbox_events_recovered_total` metric, event age | `recoverStaleEvents(maxStaleAgeSeconds = 300)` resets abandoned `PROCESSING` events to `PENDING` | Events remain durable in PostgreSQL outbox table; outbox events are durably persisted and recoverable from the tested worker/publisher failure scenarios. | Outbox scheduled poller picks up recovered events and re-dispatches |
+| **D7** | **Razorpay Payment Gateway** | Gateway timeout / 503 Service Unavailable | HIGH | Payment creation, order verification, refunds | Circuit breaker `PAYMENT_PROVIDER`, `timeout_total` | `withTimeout(8000ms)`, Circuit Breaker trips after 5 failures; uncertain states held as `PENDING_RECONCILIATION` | Fail-fast checkout with friendly retry message; webhooks queue reconciliation | HALF_OPEN probes verify Razorpay restoration; auto-reconnects to CLOSED |
+| **D8** | **SMS Provider (Twilio/MSG91)** | Upstream rate limit (429) or gateway outage (500/503) | MEDIUM | OTP delivery, SMS notifications | Circuit breaker `SMS_PROVIDER`, HTTP status code | Backoff with jitter on 429; Circuit Breaker trips on repeated 503s; 5000ms timeout | Fallback to WhatsApp / In-app notification if configured; DLQ routing on exhaustion | Breaker probes upstream; normal dispatch resumes when healthy |
+| **D9** | **Email Provider (SES/Resend)** | API error / Auth failure / Provider downtime | LOW | Email notifications, receipts | Circuit breaker `EMAIL_PROVIDER`, worker error logs | Bounded timeout (5000ms); failed jobs moved to DLQ; circuit breaker protection | In-app notification center remains available for user alerts | Breaker resets on consecutive probe successes |
+| **D10** | **Push Notifications (FCM)** | Google FCM API timeout / Token invalidation | LOW | Mobile app push notifications | Circuit breaker `NOTIFICATION_PROVIDER`, invalid token errors | Circuit breaker, invalid tokens deactivated immediately, transient errors retried | In-app notifications served via WebSocket / Polling | Breaker self-heals when FCM recovers |
+| **D11** | **Cloud Storage (S3/GCS)** | Object upload timeout / 503 SlowDown | MEDIUM | Profile picture upload, document verification | `EXTERNAL_HTTP_TIMEOUT_MS = 10000ms`, client upload error | Retry transient network failures with exponential backoff; pre-signed URL validation | User receives actionable client retry prompt | Network path restores; subsequent uploads succeed |
+| **D12** | **AI / Translation Services** | LLM latency spike or rate limiting (429) | LOW | Multilingual job translation, voice transcription | Circuit breaker `TRANSLATION_PROVIDER`, latency > 10000ms | 10000ms timeout; Circuit Breaker trips on repeated timeouts | Return original untranslated text in native script with degradation indicator | Breaker probes endpoint and resets to CLOSED |
+| **D13** | **WebSocket Realtime Gateway** | Server disconnect / Redis PubSub disconnect | MEDIUM | Real-time chat messaging, live presence, instant alerts | Client disconnect events, `reconnect_attempts_total` | Client exponential backoff with full jitter on reconnect; REST polling fallback | Durable REST endpoints and PostgreSQL database maintain single source of truth | Socket reconnects; missed messages fetched via REST message history sync |
+
+---
+
+## 3. Guiding Principles During Incidents
+
+1. **Never Mask PostgreSQL Errors with Circuit Breakers:** PostgreSQL is the single source of truth; wrapping database transactions in circuit breakers leads to split-brain states and false outages.
+2. **Never Treat Uncertain Payment State as Failed:** A timed-out payment call must remain in `PENDING_RECONCILIATION` until verified via webhook or scheduled status check.
+3. **Fail Fast to Protect Upstream:** If an external dependency is down, reject incoming calls in under 5ms rather than waiting for 10-second timeouts.
+4. **Isolate Failures Locally:** An outage in push notifications or translation must never impede job creation, search, application, or payment capture.

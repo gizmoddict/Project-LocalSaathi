@@ -25,17 +25,56 @@ export enum AccountStatus {
 export enum VerificationStatus {
   UNVERIFIED = 'UNVERIFIED',
   PENDING = 'PENDING',
+  UNDER_REVIEW = 'UNDER_REVIEW',
   VERIFIED = 'VERIFIED',
   REJECTED = 'REJECTED',
+  EXPIRED = 'EXPIRED',
 }
 
 /**
- * Authenticated user token payload shape.
+ * Minimal JWT payload for access tokens.
+ * Strict privacy: no phone, profile data, or sensitive PII inside the JWT.
  */
-export interface AuthUserPayload {
-  userId: string;
-  phone: string;
-  roles: UserRole[];
-  status: AccountStatus;
-  sessionId: string;
+export interface JwtAccessTokenPayload {
+  sub: string;       // user ID
+  sessionId: string; // active session UUID
+  role: UserRole;    // primary role enum
+  iat?: number;
+  exp?: number;
 }
+
+/**
+ * Authenticated user object populated on HTTP request by AuthGuard.
+ */
+export interface AuthenticatedUser {
+  userId: string;
+  sessionId: string;
+  role: UserRole;
+}
+
+/**
+ * Authenticated user self-profile response (/auth/me).
+ * Strict minimal exposure: id, role, accountStatus, verificationStatus, createdAt.
+ */
+export interface UserSelfProfile {
+  id: string;
+  role: UserRole;
+  accountStatus: AccountStatus;
+  verificationStatus: VerificationStatus;
+  createdAt: string;
+}
+
+/**
+ * Session metadata response for /auth/sessions.
+ */
+export interface UserSessionInfo {
+  id: string;
+  deviceInfo: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
+}
+
