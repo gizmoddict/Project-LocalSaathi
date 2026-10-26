@@ -1,0 +1,1594 @@
+// ==============================================================================
+// LocalSaathi PostgreSQL + PostGIS Database Schema
+// Production-grade Hyperlocal Employment Platform
+// ==============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, uuidOssp(map: "uuid-ossp")]
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum UserRole {
+  WORKER
+  EMPLOYER
+  ADMIN
+  MODERATOR
+  SUPPORT
+}
+
+enum AccountStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  DELETED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum WageType {
+  HOURLY
+  DAILY
+  FIXED
+  PIECE_RATE
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  FILLED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum JobUrgency {
+  IMMEDIATE
+  STANDARD
+  FLEXIBLE
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  UNAVAILABLE
+  BOOKED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum BookingStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum ConversationType {
+  DIRECT
+  JOB_CONTEXT
+  GROUP
+  JOB_RELATED
+  BOOKING_RELATED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VOICE
+  SYSTEM
+  JOB
+  BOOKING
+}
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+  DISPUTED
+}
+
+enum PaymentAttemptStatus {
+  INITIATED
+  PENDING_USER_ACTION
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+enum PaymentEventType {
+  ORDER_CREATED
+  PAYMENT_AUTHORIZED
+  PAYMENT_CAPTURED
+  PAYMENT_FAILED
+  REFUND_PROCESSED
+  DISPUTE_CREATED
+  PAYOUT_INITIATED
+  PAYOUT_PROCESSED
+  PAYOUT_FAILED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum PayoutStatus {
+  INITIATED
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum VerificationType {
+  AADHAAR
+  PAN
+  DRIVING_LICENSE
+  VOTER_ID
+  PASSPORT
+  BUSINESS_REGISTRATION
+  OTHER
+}
+
+enum DocumentType {
+  GOVERNMENT_ID
+  TRADE_CERTIFICATE
+  PROFILE_IMAGE
+  WORK_SAMPLE
+  BUSINESS_PROOF
+  ADDRESS_PROOF
+}
+
+enum ReportTargetType {
+  USER
+  JOB
+  MESSAGE
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_INVESTIGATION
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+enum ModerationCaseType {
+  REPORT
+  VERIFICATION
+  DISPUTE
+  SAFETY_ALERT
+}
+
+enum ModerationCaseStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum ModerationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ModerationActionType {
+  NONE
+  DISMISS
+  WARNING
+  CONTENT_REMOVAL
+  CAPABILITY_RESTRICTION
+  SUSPENSION
+  APPROVE_VERIFICATION
+  REJECT_VERIFICATION
+  SETTLE_DISPUTE
+}
+
+enum RestrictionType {
+  CANNOT_MESSAGE
+  CANNOT_POST_JOBS
+  CANNOT_APPLY
+  CANNOT_ACCEPT_BOOKINGS
+  TEMPORARY_SUSPENSION
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+enum SearchIndexEntityType {
+  JOB
+  WORKER
+}
+
+enum SearchIndexOperation {
+  INDEX
+  UPDATE
+  DELETE
+}
+
+enum SearchIndexStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  APPLICATION_RECEIVED
+  APPLICATION_SHORTLISTED
+  APPLICATION_REJECTED
+  APPLICATION_ACCEPTED
+  APPLICATION_WITHDRAWN
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_STARTED
+  BOOKING_COMPLETED
+  BOOKING_CANCELLED
+  JOB_PUBLISHED
+  JOB_PAUSED
+  JOB_RESUMED
+  JOB_FILLED
+  JOB_CANCELLED
+  MESSAGE_RECEIVED
+  CONVERSATION_CREATED
+  USER_BLOCKED
+  SYSTEM_NOTIFICATION
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_REINSTATED
+  USER_RESTRICTED
+  DISPUTE_RAISED
+  DISPUTE_RESOLVED
+  REPORT_FILED
+  PAYMENT_INITIATED
+  PAYMENT_CAPTURED
+  PAYMENT_FAILED
+  REFUND_PROCESSED
+  PAYOUT_INITIATED
+  PAYOUT_COMPLETED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum DomainEventType {
+  APPLICATION_CREATED
+  APPLICATION_SHORTLISTED
+  APPLICATION_REJECTED
+  APPLICATION_ACCEPTED
+  APPLICATION_WITHDRAWN
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_STARTED
+  BOOKING_COMPLETED
+  BOOKING_CANCELLED
+  JOB_PUBLISHED
+  JOB_PAUSED
+  JOB_RESUMED
+  JOB_FILLED
+  JOB_CANCELLED
+  CONVERSATION_CREATED
+  MESSAGE_CREATED
+  MESSAGE_READ
+  MESSAGE_DELETED
+  USER_BLOCKED
+  VERIFICATION_SUBMITTED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  USER_REPORTED
+  REPORT_RESOLVED
+  USER_SUSPENDED
+  USER_REINSTATED
+  USER_RESTRICTED
+  DISPUTE_RAISED
+  DISPUTE_RESOLVED
+  PAYMENT_INITIATED
+  PAYMENT_AUTHORIZED
+  PAYMENT_CAPTURED
+  PAYMENT_FAILED
+  PAYMENT_REFUNDED
+  PAYOUT_INITIATED
+  PAYOUT_PROCESSED
+  PAYOUT_FAILED
+}
+
+enum DomainEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum AnalyticsEventSource {
+  SERVER_AUTHORITATIVE
+  CLIENT_INTERACTION
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+  DEAD_LETTER
+}
+
+enum NotificationDeliveryStatus {
+  CREATED
+  DELIVERED
+  READ
+}
+
+// ------------------------------------------------------------------------------
+// 1. USERS
+// ------------------------------------------------------------------------------
+
+model User {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone              String             @unique @db.VarChar(20)
+  email              String?            @unique @db.VarChar(255)
+  role               UserRole           @default(WORKER)
+  accountStatus      AccountStatus      @default(ACTIVE) @map("account_status")
+  verificationStatus VerificationStatus @default(UNVERIFIED) @map("verification_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  deletedAt          DateTime?          @map("deleted_at")
+
+  // Relationships
+  workerProfile         WorkerProfile?
+  employerProfile       EmployerProfile?
+  conversationMembers   ConversationMember[]
+  sentMessages          Message[]
+  notifications         Notification[]
+  domainEvents          DomainEvent[]
+  outboxEvents          OutboxEvent[]
+  notificationPreference NotificationPreference?
+  payerPayments         Payment[]              @relation("PayerPayments")
+  payeePayments         Payment[]              @relation("PayeePayments")
+  workerPayouts         Payout[]               @relation("WorkerPayouts")
+  identityVerifications IdentityVerification[]
+  documents             Document[]
+  reportsFiled          Report[]               @relation("ReporterUser")
+  auditLogs             AuditLog[]
+  sessions              Session[]
+  userDevices           UserDevice[]
+  reviewsGiven          Rating[]               @relation("ReviewerRatings")
+  reviewsReceived       Rating[]               @relation("ReviewedUserRatings")
+  disputesRaised        Dispute[]              @relation("DisputeRaisedBy")
+  disputesAgainst       Dispute[]              @relation("DisputeAgainst")
+  userPresence          UserPresence?
+  blockedUsers          BlockedUser[]          @relation("BlockerUsers")
+  blockedByUsers        BlockedUser[]          @relation("BlockedUsers")
+  reportedMessages      ReportedMessage[]      @relation("ReporterMessages")
+  messageReadReceipts   MessageReadReceipt[]
+  messageReactions      MessageReaction[]
+  reviewedVerifications IdentityVerification[] @relation("ReviewedVerifications")
+  assignedCases         ModerationCase[]       @relation("AssignedModerator")
+  resolvedReports       Report[]               @relation("ResolvedReports")
+  resolvedDisputes      Dispute[]              @relation("ResolvedDisputes")
+  userRestrictions      UserRestriction[]      @relation("UserRestrictions")
+  issuedRestrictions    UserRestriction[]      @relation("IssuedRestrictions")
+  revokedRestrictions   UserRestriction[]      @relation("RevokedRestrictions")
+  caseActions           ModerationCaseAction[] @relation("CaseActionModerator")
+  analyticsEvents       AnalyticsEvent[]
+
+  @@index([role, accountStatus])
+  @@index([createdAt(sort: Desc)])
+  @@map("users")
+}
+
+// ------------------------------------------------------------------------------
+// 2. WORKER PROFILES
+// ------------------------------------------------------------------------------
+
+model WorkerProfile {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @unique @map("user_id") @db.Uuid
+  displayName        String    @map("display_name") @db.VarChar(100)
+  profilePhotoKey    String?   @map("profile_photo_key") @db.VarChar(255)
+  bio                String?   @db.Text
+  experienceYears    Int       @default(0) @map("experience_years")
+  expectedWage       Decimal?  @map("expected_wage") @db.Decimal(12, 2)
+  wageType           WageType  @default(DAILY) @map("wage_type")
+  preferredRadiusKm  Int       @default(10) @map("preferred_radius_km")
+  languages          String[]  @default(["en", "hi"])
+  isAvailable        Boolean   @default(true) @map("is_available")
+  completedJobsCount Int       @default(0) @map("completed_jobs_count")
+  avgRating          Decimal   @default(0.0) @map("avg_rating") @db.Decimal(3, 2)
+  ratingCount        Int       @default(0) @map("rating_count")
+  reliabilityScore      Decimal          @default(100.0) @map("reliability_score") @db.Decimal(5, 2)
+  onboardingStatus      OnboardingStatus @default(NOT_STARTED) @map("onboarding_status")
+  onboardingCompletedAt DateTime?        @map("onboarding_completed_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+  deletedAt             DateTime?        @map("deleted_at")
+
+  // Relationships
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerSkills    WorkerSkill[]
+  workerLocation  WorkerLocation?
+  availabilities  Availability[]
+  jobApplications JobApplication[]
+  bookings        Booking[]
+
+  @@index([isAvailable, avgRating(sort: Desc)])
+  @@index([expectedWage])
+  @@index([onboardingStatus])
+  @@map("worker_profiles")
+}
+
+// ------------------------------------------------------------------------------
+// 3. EMPLOYER PROFILES
+// ------------------------------------------------------------------------------
+
+model EmployerProfile {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String             @unique @map("user_id") @db.Uuid
+  businessName       String             @map("business_name") @db.VarChar(150)
+  description        String?            @db.Text
+  businessType       String?            @map("business_type") @db.VarChar(50)
+  contactPreferences String[]           @default(["PHONE", "IN_APP"]) @map("contact_preferences")
+  verificationState  VerificationStatus @default(UNVERIFIED) @map("verification_state")
+  totalJobsPosted       Int                @default(0) @map("total_jobs_posted")
+  totalHires            Int                @default(0) @map("total_hires")
+  addressLine           String?            @map("address_line") @db.VarChar(255)
+  locality              String?            @db.VarChar(100)
+  city                  String?            @db.VarChar(100)
+  state                 String?            @db.VarChar(100)
+  pinCode               String?            @map("pin_code") @db.VarChar(10)
+  onboardingStatus      OnboardingStatus   @default(NOT_STARTED) @map("onboarding_status")
+  onboardingCompletedAt DateTime?          @map("onboarding_completed_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  deletedAt             DateTime?          @map("deleted_at")
+
+  // Relationships
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobPosts JobPost[]
+  bookings Booking[]
+
+  @@index([businessName])
+  @@index([onboardingStatus])
+  @@map("employer_profiles")
+}
+
+// ------------------------------------------------------------------------------
+// 4. SKILLS
+// ------------------------------------------------------------------------------
+
+model Skill {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String   @db.VarChar(100)
+  normalizedName String   @unique @map("normalized_name") @db.VarChar(100)
+  category       String   @db.VarChar(50)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workerSkills      WorkerSkill[]
+  jobRequiredSkills JobRequiredSkill[]
+
+  @@index([category, isActive])
+  @@map("skills")
+}
+
+// ------------------------------------------------------------------------------
+// 5. WORKER SKILLS
+// ------------------------------------------------------------------------------
+
+model WorkerSkill {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerProfileId String   @map("worker_profile_id") @db.Uuid
+  skillId         String   @map("skill_id") @db.Uuid
+  proficiency     String   @default("INTERMEDIATE") @db.VarChar(20)
+  experienceYears Int      @default(1) @map("experience_years")
+  isVerified      Boolean  @default(false) @map("is_verified")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  skill         Skill         @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([workerProfileId, skillId])
+  @@index([skillId, isVerified])
+  @@map("worker_skills")
+}
+
+// ------------------------------------------------------------------------------
+// 6. JOB POSTS
+// ------------------------------------------------------------------------------
+
+model JobPost {
+  id                   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employerProfileId    String     @map("employer_profile_id") @db.Uuid
+  title                String     @db.VarChar(200)
+  description          String     @db.Text
+  status               JobStatus  @default(DRAFT)
+  category             String     @db.VarChar(50)
+  wageType             WageType   @map("wage_type")
+  wageAmount           Decimal    @map("wage_amount") @db.Decimal(12, 2)
+  workerCount          Int        @default(1) @map("worker_count")
+  durationDays         Int        @default(1) @map("duration_days")
+  startDate            DateTime   @map("start_date") @db.Date
+  startTime            String?    @map("start_time") @db.VarChar(10)
+  urgency              JobUrgency @default(STANDARD)
+  requirements         String[]   @default([])
+  languageRequirements String[]   @default([]) @map("language_requirements")
+  publishedAt          DateTime?  @map("published_at")
+  expiresAt            DateTime?  @map("expires_at")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+  deletedAt            DateTime?  @map("deleted_at")
+
+  // Relationships
+  employerProfile   EmployerProfile    @relation(fields: [employerProfileId], references: [id], onDelete: Cascade)
+  jobRequiredSkills JobRequiredSkill[]
+  jobLocation       JobLocation?
+  jobApplications   JobApplication[]
+  bookings          Booking[]
+  conversations     Conversation[]
+
+  @@index([status, category, publishedAt(sort: Desc)])
+  @@index([employerProfileId, status])
+  @@index([startDate(sort: Asc)])
+  @@map("job_posts")
+}
+
+// ------------------------------------------------------------------------------
+// 7. JOB REQUIRED SKILLS
+// ------------------------------------------------------------------------------
+
+model JobRequiredSkill {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobPostId          String   @map("job_post_id") @db.Uuid
+  skillId            String   @map("skill_id") @db.Uuid
+  isRequired         Boolean  @default(true) @map("is_required")
+  minExperienceYears Int      @default(0) @map("min_experience_years")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  jobPost JobPost @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([jobPostId, skillId])
+  @@index([skillId, isRequired])
+  @@map("job_required_skills")
+}
+
+// ------------------------------------------------------------------------------
+// 8. JOB LOCATIONS (PostGIS Point)
+// ------------------------------------------------------------------------------
+
+model JobLocation {
+  id          String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobPostId   String                                @unique @map("job_post_id") @db.Uuid
+  latitude    Float
+  longitude   Float
+  location    Unsupported("geography(Point, 4326)")?
+  addressLine String?                               @map("address_line") @db.VarChar(255)
+  locality    String                                @db.VarChar(100)
+  city        String                                @db.VarChar(100)
+  state       String                                @db.VarChar(100)
+  pinCode     String                                @map("pin_code") @db.VarChar(10)
+  createdAt   DateTime                              @default(now()) @map("created_at")
+  updatedAt   DateTime                              @updatedAt @map("updated_at")
+
+  // Relationships
+  jobPost JobPost @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  @@index([city, locality])
+  @@map("job_locations")
+}
+
+// ------------------------------------------------------------------------------
+// 9. WORKER LOCATIONS (PostGIS Point - Retention Friendly)
+// ------------------------------------------------------------------------------
+
+model WorkerLocation {
+  id              String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerProfileId String                                @unique @map("worker_profile_id") @db.Uuid
+  latitude        Float
+  longitude       Float
+  location        Unsupported("geography(Point, 4326)")?
+  accuracyMeters  Float?                                @map("accuracy_meters")
+  addressLine     String?                               @map("address_line") @db.VarChar(255)
+  locality        String?                               @db.VarChar(100)
+  city            String?                               @db.VarChar(100)
+  state           String?                               @db.VarChar(100)
+  pinCode         String?                               @map("pin_code") @db.VarChar(10)
+  isActive        Boolean                               @default(true) @map("is_active")
+  updatedAt       DateTime                              @updatedAt @map("updated_at")
+
+  // Relationships
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([city, locality])
+  @@index([isActive, updatedAt(sort: Desc)])
+  @@map("worker_locations")
+}
+
+// ------------------------------------------------------------------------------
+// 10. AVAILABILITY
+// ------------------------------------------------------------------------------
+
+model Availability {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerProfileId String             @map("worker_profile_id") @db.Uuid
+  date            DateTime           @db.Date
+  startTime       String?            @map("start_time") @db.VarChar(10)
+  endTime         String?            @map("end_time") @db.VarChar(10)
+  status          AvailabilityStatus @default(AVAILABLE)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  // Relationships
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([workerProfileId, date])
+  @@index([workerProfileId, date, status])
+  @@map("availability")
+}
+
+// ------------------------------------------------------------------------------
+// 11. JOB APPLICATIONS
+// ------------------------------------------------------------------------------
+
+model JobApplication {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobPostId          String            @map("job_post_id") @db.Uuid
+  workerProfileId    String            @map("worker_profile_id") @db.Uuid
+  status             ApplicationStatus @default(APPLIED)
+  applicationMessage String?           @map("application_message") @db.Text
+  decisionNotes      String?           @map("decision_notes") @db.Text
+  appliedAt          DateTime          @default(now()) @map("applied_at")
+  shortlistedAt      DateTime?         @map("shortlisted_at")
+  rejectedAt         DateTime?         @map("rejected_at")
+  acceptedAt         DateTime?         @map("accepted_at")
+  withdrawnAt        DateTime?         @map("withdrawn_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  // Relationships
+  jobPost       JobPost        @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  workerProfile WorkerProfile  @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  booking       Booking?
+  conversations Conversation[]
+
+  // Constraint: One active application per worker per job
+  @@unique([jobPostId, workerProfileId])
+  @@index([jobPostId])
+  @@index([workerProfileId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([jobPostId, status])
+  @@index([workerProfileId, status])
+  @@index([workerProfileId, appliedAt(sort: Desc)])
+  @@map("job_applications")
+}
+
+// ------------------------------------------------------------------------------
+// 12. BOOKINGS
+// ------------------------------------------------------------------------------
+
+model Booking {
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobPostId             String        @map("job_post_id") @db.Uuid
+  applicationId         String        @unique @map("application_id") @db.Uuid
+  employerProfileId     String        @map("employer_profile_id") @db.Uuid
+  workerProfileId       String        @map("worker_profile_id") @db.Uuid
+  status                BookingStatus @default(PENDING_CONFIRMATION)
+
+  // Contract snapshot fields (historically stable agreement)
+  jobTitle              String?       @map("job_title") @db.VarChar(200)
+  jobCategory           String?       @map("job_category") @db.VarChar(50)
+  agreedWage            Decimal?      @map("agreed_wage") @db.Decimal(12, 2)
+  wageType              WageType?     @map("wage_type")
+  totalAmount           Decimal       @map("total_amount") @db.Decimal(12, 2)
+  currency              String        @default("INR") @db.VarChar(10)
+  startDate             DateTime?     @map("start_date") @db.Date
+  endDate               DateTime?     @map("end_date") @db.Date
+  startTime             String?       @map("start_time") @db.VarChar(10)
+  endTime               String?       @map("end_time") @db.VarChar(10)
+  durationDays          Int           @default(1) @map("duration_days")
+  workLocationAddress   String?       @map("work_location_address") @db.VarChar(255)
+  workLocationLocality  String?       @map("work_location_locality") @db.VarChar(100)
+  workLocationCity      String?       @map("work_location_city") @db.VarChar(100)
+  workLocationState     String?       @map("work_location_state") @db.VarChar(100)
+  workLocationPinCode   String?       @map("work_location_pin_code") @db.VarChar(10)
+  workLocationLatitude  Float?        @map("work_location_latitude")
+  workLocationLongitude Float?        @map("work_location_longitude")
+  workerName            String?       @map("worker_name") @db.VarChar(100)
+  employerName          String?       @map("employer_name") @db.VarChar(100)
+
+  // Operational schedule (backward compatibility)
+  scheduledStart        DateTime?     @map("scheduled_start")
+  scheduledEnd          DateTime?     @map("scheduled_end")
+
+  // Lifecycle Timestamps
+  confirmedAt           DateTime?     @map("confirmed_at")
+  startedAt             DateTime?     @map("started_at")
+  completedAt           DateTime?     @map("completed_at")
+  cancelledAt           DateTime?     @map("cancelled_at")
+  cancellationReason    String?       @map("cancellation_reason") @db.VarChar(500)
+  cancelledByRole       UserRole?     @map("cancelled_by_role")
+
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  // Relationships
+  jobPost         JobPost         @relation(fields: [jobPostId], references: [id], onDelete: Restrict)
+  application     JobApplication  @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  employerProfile EmployerProfile @relation(fields: [employerProfileId], references: [id], onDelete: Restrict)
+  workerProfile   WorkerProfile   @relation(fields: [workerProfileId], references: [id], onDelete: Restrict)
+  payments        Payment[]
+  payouts         Payout[]
+  ratings         Rating[]
+  disputes        Dispute[]
+  conversations   Conversation[]
+
+  @@index([employerProfileId, status])
+  @@index([workerProfileId, status])
+  @@index([jobPostId])
+  @@index([status, startDate])
+  @@index([createdAt(sort: Desc)])
+  @@map("bookings")
+}
+
+// ------------------------------------------------------------------------------
+// 13. CONVERSATIONS
+// ------------------------------------------------------------------------------
+
+model Conversation {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type          ConversationType @default(DIRECT)
+  jobPostId     String?          @map("job_post_id") @db.Uuid
+  applicationId String?          @map("application_id") @db.Uuid
+  bookingId     String?          @map("booking_id") @db.Uuid
+  lastMessageAt DateTime?        @map("last_message_at")
+  lastMessageId String?          @map("last_message_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  // Relationships
+  jobPost     JobPost?             @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  application JobApplication?      @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  booking     Booking?             @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  members     ConversationMember[]
+  messages    Message[]
+
+  @@index([jobPostId])
+  @@index([applicationId])
+  @@index([bookingId])
+  @@index([lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// ------------------------------------------------------------------------------
+// 14. CONVERSATION MEMBERS
+// ------------------------------------------------------------------------------
+
+model ConversationMember {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId    String    @map("conversation_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  joinedAt          DateTime  @default(now()) @map("joined_at")
+  lastReadMessageId String?   @map("last_read_message_id") @db.Uuid
+  lastReadAt        DateTime? @map("last_read_at")
+  mutedAt           DateTime? @map("muted_at")
+  archivedAt        DateTime? @map("archived_at")
+  unreadCount       Int       @default(0) @map("unread_count")
+
+  // Relationships
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, joinedAt(sort: Desc)])
+  @@index([userId, unreadCount])
+  @@map("conversation_members")
+}
+
+// ------------------------------------------------------------------------------
+// 15. MESSAGES
+// ------------------------------------------------------------------------------
+
+model Message {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId   String      @map("conversation_id") @db.Uuid
+  senderId         String      @map("sender_id") @db.Uuid
+  clientMessageId  String?     @map("client_message_id") @db.VarChar(100)
+  sequenceNumber   Int         @default(0) @map("sequence_number")
+  messageType      MessageType @default(TEXT) @map("message_type")
+  body             String?     @db.Text
+  content          String?     @db.Text
+  attachmentKey    String?     @map("attachment_key") @db.VarChar(255)
+  replyToMessageId String?     @map("reply_to_message_id") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at")
+  sentAt           DateTime    @default(now()) @map("sent_at")
+  editedAt         DateTime?   @map("edited_at")
+  deletedAt        DateTime?   @map("deleted_at")
+
+  // Relationships
+  conversation Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                 @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  replyTo      Message?             @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies      Message[]            @relation("MessageReplies")
+  attachments  MessageAttachment[]
+  readReceipts MessageReadReceipt[]
+  reactions    MessageReaction[]
+  reports      ReportedMessage[]
+
+  @@unique([conversationId, senderId, clientMessageId])
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([conversationId, sequenceNumber])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId  String   @map("message_id") @db.Uuid
+  fileType   String   @map("file_type") @db.VarChar(50)
+  fileUrl    String   @map("file_url") @db.Text
+  fileName   String?  @map("file_name") @db.VarChar(255)
+  fileSize   Int?     @map("file_size")
+  mimeType   String?  @map("mime_type") @db.VarChar(100)
+  duration   Int?
+  storageKey String?  @map("storage_key") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attachments")
+}
+
+model MessageReadReceipt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  readAt    DateTime @default(now()) @map("read_at")
+
+  // Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, readAt(sort: Desc)])
+  @@map("message_read_receipts")
+}
+
+model MessageReaction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emoji     String   @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("message_reactions")
+}
+
+model UserPresence {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @unique @map("user_id") @db.Uuid
+  status     String   @default("OFFLINE") @db.VarChar(20)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("user_presences")
+}
+
+model BlockedUser {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  reason    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  blocker User @relation("BlockerUsers", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockedUsers", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocked_users")
+}
+
+model ReportedMessage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId     String   @map("reporter_id") @db.Uuid
+  messageId      String   @map("message_id") @db.Uuid
+  conversationId String?  @map("conversation_id") @db.Uuid
+  reason         String   @db.VarChar(50)
+  details        String?  @db.Text
+  status         String   @default("PENDING") @db.VarChar(30)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  reporter User    @relation("ReporterMessages", fields: [reporterId], references: [id], onDelete: Cascade)
+  message  Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([reporterId])
+  @@index([status, createdAt(sort: Asc)])
+  @@map("reported_messages")
+}
+
+// ------------------------------------------------------------------------------
+// 16. NOTIFICATIONS
+// ------------------------------------------------------------------------------
+
+model Notification {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientId   String               @map("recipient_id") @db.Uuid
+  type          String               @db.VarChar(50)
+  title         String               @db.VarChar(150)
+  body          String               @db.Text
+  priority      NotificationPriority @default(NORMAL)
+  entityType    String?              @map("entity_type") @db.VarChar(50)
+  entityId      String?              @map("entity_id") @db.Uuid
+  payload       Json?
+  sourceEventId String?              @map("source_event_id") @db.Uuid
+  isRead         Boolean                    @default(false) @map("is_read")
+  readAt         DateTime?                  @map("read_at")
+  deliveryStatus NotificationDeliveryStatus @default(CREATED) @map("delivery_status")
+  deliveredAt    DateTime?                  @map("delivered_at")
+  expiresAt      DateTime?                  @map("expires_at")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+
+  // Relationships
+  recipient   User         @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  sourceEvent DomainEvent? @relation(fields: [sourceEventId], references: [id])
+
+  @@index([recipientId, isRead, createdAt(sort: Desc)])
+  @@index([recipientId, deliveryStatus])
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("notifications")
+}
+
+model DomainEvent {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type        DomainEventType
+  status      DomainEventStatus @default(PENDING)
+  actorId     String?           @map("actor_id") @db.Uuid
+  entityType  String            @map("entity_type") @db.VarChar(50)
+  entityId    String            @map("entity_id") @db.Uuid
+  payload     Json
+  errorReason String?           @map("error_reason") @db.Text
+  processedAt DateTime?         @map("processed_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  // Relationships
+  actor         User?          @relation(fields: [actorId], references: [id])
+  notifications Notification[]
+
+  @@index([status, createdAt(sort: Asc)])
+  @@index([entityType, entityId])
+  @@map("domain_events")
+}
+
+model OutboxEvent {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType     String       @map("event_type") @db.VarChar(100)
+  eventVersion  Int          @default(1) @map("event_version")
+  aggregateType String       @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String       @map("aggregate_id") @db.Uuid
+  actorId       String?      @map("actor_id") @db.Uuid
+  payload       Json
+  metadata      Json?
+  status        OutboxStatus @default(PENDING)
+  attemptCount  Int          @default(0) @map("attempt_count")
+  maxAttempts   Int          @default(5) @map("max_attempts")
+  availableAt   DateTime     @default(now()) @map("available_at")
+  processedAt   DateTime?    @map("processed_at")
+  failedAt      DateTime?    @map("failed_at")
+  lockedAt      DateTime?    @map("locked_at")
+  lockedBy      String?      @map("locked_by") @db.VarChar(100)
+  lastError     String?      @map("last_error") @db.Text
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  // Relationships
+  actor       User?             @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  processings EventProcessing[]
+
+  @@index([status, availableAt, createdAt(sort: Asc)])
+  @@index([aggregateType, aggregateId])
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("outbox_events")
+}
+
+model EventProcessing {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId      String      @map("event_id") @db.Uuid
+  handlerName  String      @map("handler_name") @db.VarChar(100)
+  status       String      @default("PROCESSED") @db.VarChar(20)
+  processedAt  DateTime    @default(now()) @map("processed_at")
+  attemptCount Int         @default(1) @map("attempt_count")
+  lastError    String?     @map("last_error") @db.Text
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  // Relationships
+  event OutboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, handlerName])
+  @@index([handlerName, status])
+  @@map("event_processing")
+}
+
+
+model NotificationPreference {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String   @unique @map("user_id") @db.Uuid
+  applicationUpdates   Boolean  @default(true) @map("application_updates")
+  bookingUpdates       Boolean  @default(true) @map("booking_updates")
+  jobUpdates           Boolean  @default(true) @map("job_updates")
+  messageUpdates       Boolean  @default(true) @map("message_updates")
+  systemUpdates        Boolean  @default(true) @map("system_updates")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ------------------------------------------------------------------------------
+// 17. RATINGS / REVIEWS
+// ------------------------------------------------------------------------------
+
+model Rating {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reviewerId     String   @map("reviewer_id") @db.Uuid
+  reviewedUserId String   @map("reviewed_user_id") @db.Uuid
+  bookingId      String   @map("booking_id") @db.Uuid
+  rating         Int      @db.SmallInt
+  review         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  reviewer     User    @relation("ReviewerRatings", fields: [reviewerId], references: [id], onDelete: Restrict)
+  reviewedUser User    @relation("ReviewedUserRatings", fields: [reviewedUserId], references: [id], onDelete: Restrict)
+  booking      Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, reviewerId])
+  @@index([reviewedUserId, rating])
+  @@map("ratings")
+}
+
+// ------------------------------------------------------------------------------
+// 18. PAYMENTS & FINANCIAL INFRASTRUCTURE
+// ------------------------------------------------------------------------------
+
+model Payment {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payerId           String        @map("payer_id") @db.Uuid
+  payeeId           String?       @map("payee_id") @db.Uuid
+  bookingId         String?       @map("booking_id") @db.Uuid
+  provider          String        @default("RAZORPAY") @db.VarChar(50)
+  providerOrderId   String?       @map("provider_order_id") @db.VarChar(100)
+  providerPaymentId String?       @unique @map("provider_payment_id") @db.VarChar(100)
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("INR") @db.VarChar(10)
+  status            PaymentStatus @default(INITIATED)
+  idempotencyKey    String        @unique @map("idempotency_key") @db.VarChar(100)
+  metadata          Json?
+  failureCode       String?       @map("failure_code") @db.VarChar(50)
+  failureReason     String?       @map("failure_reason") @db.VarChar(500)
+  capturedAt        DateTime?     @map("captured_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relationships
+  payer    User             @relation("PayerPayments", fields: [payerId], references: [id], onDelete: Restrict)
+  payee    User?            @relation("PayeePayments", fields: [payeeId], references: [id], onDelete: SetNull)
+  booking  Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  attempts PaymentAttempt[]
+  events   PaymentEvent[]
+  refunds  Refund[]
+
+  @@index([payerId, status])
+  @@index([payeeId, status])
+  @@index([bookingId])
+  @@index([providerOrderId])
+  @@index([createdAt(sort: Desc)])
+  @@map("payments")
+}
+
+model PaymentAttempt {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentId         String               @map("payment_id") @db.Uuid
+  attemptNumber     Int                  @default(1) @map("attempt_number")
+  status            PaymentAttemptStatus @default(INITIATED)
+  providerReference String?              @map("provider_reference") @db.VarChar(100)
+  requestPayload    Json?                @map("request_payload")
+  responsePayload   Json?                @map("response_payload")
+  failureReason     String?              @map("failure_reason") @db.VarChar(500)
+  createdAt         DateTime             @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, attemptNumber])
+  @@map("payment_attempts")
+}
+
+model Refund {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentId        String       @map("payment_id") @db.Uuid
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @default("INR") @db.VarChar(10)
+  reason           String?      @db.VarChar(255)
+  status           RefundStatus @default(PENDING)
+  providerRefundId String?      @unique @map("provider_refund_id") @db.VarChar(100)
+  idempotencyKey   String       @unique @map("idempotency_key") @db.VarChar(100)
+  failureReason    String?      @map("failure_reason") @db.VarChar(500)
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId, status])
+  @@map("refunds")
+}
+
+model Payout {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId        String?      @map("booking_id") @db.Uuid
+  workerId         String       @map("worker_id") @db.Uuid
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @default("INR") @db.VarChar(10)
+  status           PayoutStatus @default(INITIATED)
+  provider         String       @default("RAZORPAY") @db.VarChar(50)
+  providerPayoutId String?      @unique @map("provider_payout_id") @db.VarChar(100)
+  idempotencyKey   String       @unique @map("idempotency_key") @db.VarChar(100)
+  failureReason    String?      @map("failure_reason") @db.VarChar(500)
+  processedAt      DateTime?    @map("processed_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  worker  User     @relation("WorkerPayouts", fields: [workerId], references: [id], onDelete: Restrict)
+
+  @@index([workerId, status])
+  @@index([bookingId])
+  @@map("payouts")
+}
+
+// ------------------------------------------------------------------------------
+// 19. PAYMENT EVENTS (Webhooks & Replay Protection)
+// ------------------------------------------------------------------------------
+
+model PaymentEvent {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentId   String?   @map("payment_id") @db.Uuid
+  provider    String    @default("RAZORPAY") @db.VarChar(50)
+  eventId     String    @unique @map("event_id") @db.VarChar(150)
+  eventType   String    @map("event_type") @db.VarChar(100)
+  payload     Json
+  isProcessed Boolean   @default(false) @map("is_processed")
+  processedAt DateTime? @map("processed_at")
+  receivedAt  DateTime  @default(now()) @map("received_at")
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([provider, eventType])
+  @@index([isProcessed, receivedAt(sort: Asc)])
+  @@index([paymentId])
+  @@map("payment_events")
+}
+
+// ------------------------------------------------------------------------------
+// 20. IDENTITY VERIFICATIONS
+// ------------------------------------------------------------------------------
+
+model IdentityVerification {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  verificationType  VerificationType   @map("verification_type")
+  status            VerificationStatus @default(PENDING)
+  providerReference String?            @map("provider_reference") @db.VarChar(100)
+  reviewerId        String?            @map("reviewer_id") @db.Uuid
+  notes             String?            @db.Text
+  submittedAt       DateTime           @default(now()) @map("submitted_at")
+  reviewedAt        DateTime?          @map("reviewed_at")
+  verifiedAt        DateTime?          @map("verified_at")
+  rejectionReason   String?            @map("rejection_reason") @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  // Relationships
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer       User?           @relation("ReviewedVerifications", fields: [reviewerId], references: [id], onDelete: SetNull)
+  documents      Document[]
+  moderationCase ModerationCase?
+
+  @@index([userId, status])
+  @@map("identity_verifications")
+}
+
+// ------------------------------------------------------------------------------
+// 21. DOCUMENTS (Metadata Only)
+// ------------------------------------------------------------------------------
+
+model Document {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId            String             @map("owner_id") @db.Uuid
+  verificationId     String?            @map("verification_id") @db.Uuid
+  type               DocumentType
+  objectStorageKey   String             @map("object_storage_key") @db.VarChar(255)
+  mimeType           String             @map("mime_type") @db.VarChar(100)
+  fileSizeBytes      Int                @map("file_size_bytes")
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  rejectionReason    String?            @map("rejection_reason") @db.Text
+  createdAt          DateTime           @default(now()) @map("created_at")
+  deletedAt          DateTime?          @map("deleted_at")
+
+  // Relationships
+  owner        User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  verification IdentityVerification? @relation(fields: [verificationId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, type])
+  @@index([verificationId])
+  @@map("documents")
+}
+
+// ------------------------------------------------------------------------------
+// 22. REPORTS
+// ------------------------------------------------------------------------------
+
+model Report {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId       String           @map("reporter_id") @db.Uuid
+  targetType       ReportTargetType @map("target_type")
+  targetId         String           @map("target_id") @db.Uuid
+  reason           String           @db.Text
+  details          String?          @db.Text
+  status           ReportStatus     @default(PENDING)
+  moderationCaseId String?          @map("moderation_case_id") @db.Uuid
+  resolvedById     String?          @map("resolved_by_id") @db.Uuid
+  actionTaken      String?          @map("action_taken") @db.VarChar(50)
+  resolutionNotes  String?          @map("resolution_notes") @db.Text
+  createdAt        DateTime         @default(now()) @map("created_at")
+  resolvedAt       DateTime?        @map("resolved_at")
+
+  // Relationships
+  reporter       User            @relation("ReporterUser", fields: [reporterId], references: [id], onDelete: Cascade)
+  moderationCase ModerationCase? @relation(fields: [moderationCaseId], references: [id], onDelete: SetNull)
+  resolvedBy     User?           @relation("ResolvedReports", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([status, createdAt(sort: Asc)])
+  @@index([moderationCaseId])
+  @@map("reports")
+}
+
+// ------------------------------------------------------------------------------
+// 23. DISPUTES
+// ------------------------------------------------------------------------------
+
+model Dispute {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId        String          @map("booking_id") @db.Uuid
+  raisedById       String          @map("raised_by_id") @db.Uuid
+  againstId        String          @map("against_id") @db.Uuid
+  reason           String          @db.Text
+  description      String?         @db.Text
+  status           DisputeStatus   @default(OPEN)
+  moderationCaseId String?         @map("moderation_case_id") @db.Uuid
+  resolvedById     String?         @map("resolved_by_id") @db.Uuid
+  resolution       String?         @db.Text
+  resolutionNotes  String?         @map("resolution_notes") @db.Text
+  createdAt        DateTime        @default(now()) @map("created_at")
+  resolvedAt       DateTime?       @map("resolved_at")
+
+  // Relationships
+  booking        Booking         @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  raisedBy       User            @relation("DisputeRaisedBy", fields: [raisedById], references: [id], onDelete: Restrict)
+  against        User            @relation("DisputeAgainst", fields: [againstId], references: [id], onDelete: Restrict)
+  moderationCase ModerationCase? @relation(fields: [moderationCaseId], references: [id], onDelete: SetNull)
+  resolvedBy     User?           @relation("ResolvedDisputes", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([status, createdAt(sort: Asc)])
+  @@index([moderationCaseId])
+  @@map("disputes")
+}
+
+// ------------------------------------------------------------------------------
+// 23.1 MODERATION CASES & ACTIONS
+// ------------------------------------------------------------------------------
+
+model ModerationCase {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caseNumber       String                @unique @map("case_number") @db.VarChar(50)
+  caseType         ModerationCaseType    @map("case_type")
+  priority         ModerationPriority    @default(MEDIUM)
+  status           ModerationCaseStatus  @default(PENDING)
+  assignedToId     String?               @map("assigned_to_id") @db.Uuid
+  targetEntityType String                @map("target_entity_type") @db.VarChar(50)
+  targetEntityId   String                @map("target_entity_id") @db.Uuid
+  title            String                @db.VarChar(200)
+  description      String?               @db.Text
+  resolution       ModerationActionType  @default(NONE)
+  resolutionNotes  String?               @map("resolution_notes") @db.Text
+  resolvedAt       DateTime?             @map("resolved_at")
+  verificationId   String?               @unique @map("verification_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  // Relationships
+  assignedTo   User?                  @relation("AssignedModerator", fields: [assignedToId], references: [id], onDelete: SetNull)
+  verification IdentityVerification?  @relation(fields: [verificationId], references: [id], onDelete: SetNull)
+  reports      Report[]
+  disputes     Dispute[]
+  actions      ModerationCaseAction[]
+
+  @@index([status, priority, createdAt(sort: Asc)])
+  @@index([caseType, status])
+  @@index([targetEntityType, targetEntityId])
+  @@index([assignedToId, status])
+  @@map("moderation_cases")
+}
+
+model ModerationCaseAction {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caseId      String               @map("case_id") @db.Uuid
+  moderatorId String               @map("moderator_id") @db.Uuid
+  actionType  ModerationActionType @map("action_type")
+  notes       String?              @db.Text
+  metadata    Json?
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  // Relationships
+  case      ModerationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  moderator User           @relation("CaseActionModerator", fields: [moderatorId], references: [id], onDelete: Restrict)
+
+  @@index([caseId, createdAt(sort: Asc)])
+  @@index([moderatorId, createdAt(sort: Desc)])
+  @@map("moderation_case_actions")
+}
+
+// ------------------------------------------------------------------------------
+// 23.2 USER RESTRICTIONS
+// ------------------------------------------------------------------------------
+
+model UserRestriction {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String          @map("user_id") @db.Uuid
+  restrictionType RestrictionType @map("restriction_type")
+  isActive        Boolean         @default(true) @map("is_active")
+  reason          String          @db.Text
+  issuedById      String?         @map("issued_by_id") @db.Uuid
+  expiresAt       DateTime?       @map("expires_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  revokedAt       DateTime?       @map("revoked_at")
+  revokedById     String?         @map("revoked_by_id") @db.Uuid
+
+  // Relationships
+  user      User  @relation("UserRestrictions", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy  User? @relation("IssuedRestrictions", fields: [issuedById], references: [id], onDelete: SetNull)
+  revokedBy User? @relation("RevokedRestrictions", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, isActive])
+  @@index([restrictionType, isActive])
+  @@map("user_restrictions")
+}
+
+// ------------------------------------------------------------------------------
+// 24. AUDIT LOGS (Immutable)
+// ------------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String   @map("entity_id") @db.VarChar(100)
+  metadata   Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// ------------------------------------------------------------------------------
+// 25. SESSIONS
+// ------------------------------------------------------------------------------
+
+model Session {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  sessionTokenHash  String    @unique @map("session_token_hash") @db.VarChar(128)
+  previousTokenHash String?   @map("previous_token_hash") @db.VarChar(128)
+  deviceInfo        String?   @map("device_info") @db.VarChar(255)
+  ipAddress         String?   @map("ip_address") @db.VarChar(45)
+  userAgent         String?   @map("user_agent") @db.VarChar(255)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  expiresAt         DateTime  @map("expires_at")
+  revokedAt         DateTime? @map("revoked_at")
+  lastUsedAt        DateTime  @default(now()) @map("last_used_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([previousTokenHash])
+  @@map("sessions")
+}
+
+
+// ------------------------------------------------------------------------------
+// 26. USER DEVICES
+// ------------------------------------------------------------------------------
+
+model UserDevice {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  deviceId      String         @map("device_id") @db.VarChar(100)
+  platform      DevicePlatform @default(ANDROID)
+  pushTokenHash String?        @map("push_token_hash") @db.VarChar(128)
+  lastSeenAt    DateTime       @default(now()) @map("last_seen_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId, platform])
+  @@map("user_devices")
+}
+
+// ------------------------------------------------------------------------------
+// 27. SEARCH INDEX EVENTS (Asynchronous OpenSearch Queue)
+// ------------------------------------------------------------------------------
+
+model SearchIndexEvent {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType   SearchIndexEntityType @map("entity_type")
+  entityId     String                @map("entity_id") @db.Uuid
+  operation    SearchIndexOperation
+  status       SearchIndexStatus     @default(PENDING)
+  retryCount   Int                   @default(0) @map("retry_count")
+  availableAt  DateTime              @default(now()) @map("available_at")
+  processedAt  DateTime?             @map("processed_at")
+  errorDetails String?               @map("error_details") @db.Text
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  @@index([status, availableAt(sort: Asc)])
+  @@index([entityType, entityId])
+  @@map("search_index_events")
+}
+
+// ------------------------------------------------------------------------------
+// 28. OTP CHALLENGES (Temporary Secure Authentication State)
+// ------------------------------------------------------------------------------
+
+model OtpChallenge {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone       String    @db.VarChar(20)
+  otpHash     String    @map("otp_hash") @db.VarChar(128)
+  purpose     String    @default("LOGIN") @db.VarChar(50)
+  expiresAt   DateTime  @map("expires_at")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3) @map("max_attempts")
+  consumedAt  DateTime? @map("consumed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([phone, expiresAt])
+  @@index([phone, createdAt(sort: Desc)])
+  @@map("otp_challenges")
+}
+
+// ------------------------------------------------------------------------------
+// 29. PRODUCT ANALYTICS EVENTS (Telemetry, Canonical Taxonomy & Funnel Tracking)
+// ------------------------------------------------------------------------------
+
+model AnalyticsEvent {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId            String               @unique @map("event_id") @db.VarChar(128)
+  eventName          String               @map("event_name") @db.VarChar(100)
+  userId             String?              @map("user_id") @db.Uuid
+  anonymousSessionId String?              @map("anonymous_session_id") @db.VarChar(128)
+  platform           String               @default("WEB") @db.VarChar(32)
+  appVersion         String               @default("1.0.0") @map("app_version") @db.VarChar(32)
+  source             AnalyticsEventSource @default(SERVER_AUTHORITATIVE)
+  correlationId      String?              @map("correlation_id") @db.VarChar(128)
+  schemaVersion      Int                  @default(1) @map("schema_version")
+  metadata           Json                 @default("{}")
+  occurredAt         DateTime             @default(now()) @map("occurred_at")
+  ingestedAt         DateTime             @default(now()) @map("ingested_at")
+
+  // Relationships (nullable on delete/anonymization)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventName, occurredAt(sort: Desc)])
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([anonymousSessionId, occurredAt(sort: Desc)])
+  @@index([occurredAt(sort: Desc)])
+  @@index([source, occurredAt(sort: Desc)])
+  @@map("analytics_events")
+}
+
