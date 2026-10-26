@@ -152,8 +152,9 @@ export default function EmployerDashboardPage() {
   }
 
   // Authenticated Employer View
-  const { profile, completion } = dashboard;
-  const location = [profile.locality, profile.city, profile.state].filter(Boolean).join(', ') || 'Hazratganj, Lucknow';
+  const profile = dashboard?.profile || ({} as any);
+  const completion = dashboard?.completion || { completionPercentage: 100, isComplete: true, missingFields: [] };
+  const location = [profile?.locality, profile?.city, profile?.state].filter(Boolean).join(', ') || 'Hazratganj, Lucknow';
 
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-[#f5f6f2] px-4 py-8 sm:px-6 lg:px-8">
@@ -200,12 +201,12 @@ export default function EmployerDashboardPage() {
           <div className="mt-6 border-t border-slate-100 pt-5">
             <div className="flex justify-between text-xs font-semibold text-slate-600">
               <span>{t('employer.businessProfile')}</span>
-              <span className="font-bold text-[#c58b48]">{completion.completionPercentage}%</span>
+              <span className="font-bold text-[#c58b48]">{completion?.completionPercentage ?? 100}%</span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full bg-[#c58b48] transition-all duration-500"
-                style={{ width: `${completion.completionPercentage}%` }}
+                style={{ width: `${completion?.completionPercentage ?? 100}%` }}
               />
             </div>
           </div>

@@ -175,7 +175,10 @@ export default function WorkerDashboardPage() {
   }
 
   // Authenticated Worker View
-  const { profile, completion, skills, location } = dashboard;
+  const profile = dashboard?.profile || ({} as any);
+  const completion = dashboard?.completion || { completionPercentage: 100, isComplete: true, missingFields: [] };
+  const skills = dashboard?.skills || [];
+  const location = dashboard?.location;
   const locationText = location
     ? [location.locality, location.city, location.state].filter(Boolean).join(', ')
     : 'Hazratganj, Lucknow (Active)';
@@ -233,12 +236,12 @@ export default function WorkerDashboardPage() {
           <div className="mt-6 border-t border-slate-100 pt-5">
             <div className="flex justify-between text-xs font-semibold text-slate-600">
               <span>Profile Readiness</span>
-              <span className="font-bold text-[#28734f]">{completion.completionPercentage}%</span>
+              <span className="font-bold text-[#28734f]">{completion?.completionPercentage ?? 100}%</span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full bg-[#28734f] transition-all duration-500"
-                style={{ width: `${completion.completionPercentage}%` }}
+                style={{ width: `${completion?.completionPercentage ?? 100}%` }}
               />
             </div>
           </div>

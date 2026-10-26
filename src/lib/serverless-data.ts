@@ -87,6 +87,7 @@ export const DEMO_EMPLOYER_PROFILE = {
   businessName: 'Verma Infrastructure & Contracting',
   businessType: 'Contractor / Builder',
   contactPerson: 'Suresh Verma',
+  locality: 'Hazratganj',
   city: 'Lucknow',
   state: 'Uttar Pradesh',
   rating: 4.9,

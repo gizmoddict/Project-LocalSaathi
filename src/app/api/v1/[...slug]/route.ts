@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import {
   DEMO_WORKER,
   DEMO_EMPLOYER,
@@ -9,6 +10,9 @@ import {
   DEMO_BOOKINGS,
   DEMO_NOTIFICATIONS,
 } from '@/lib/serverless-data';
+
+// In-memory active OTP challenge store: phone -> { otp, expiresAt, role }
+const activeOtpChallenges = new Map<string, { otp: string; expiresAt: number; role: string }>();
 
 // Helper to parse query parameters
 function parseQueryParams(req: NextRequest) {
@@ -104,6 +108,13 @@ export async function GET(
   if (slugPath === 'employers/me/dashboard') {
     return NextResponse.json({
       profile: DEMO_EMPLOYER_PROFILE,
+      completion: DEMO_EMPLOYER_PROFILE.completion,
+      activeJobsCount: runtimeJobs.length,
+      totalJobsCount: runtimeJobs.length + 3,
+      totalApplicationsCount: 14,
+      pendingApplicationsCount: 4,
+      shortlistedApplicationsCount: 2,
+      acceptedApplicationsCount: 1,
       stats: {
         activeJobsCount: runtimeJobs.length,
         totalApplicationsReceived: 14,
@@ -257,18 +268,44 @@ export async function POST(
 
   // 1. Auth OTP Request
   if (slugPath === 'auth/otp/request') {
+    const rawPhone = body.phone ? String(body.phone).replace(/\D/g, '') : '';
+    const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9123456780';
+    const role = body.role || 'WORKER';
+
+    // Generate dynamic, cryptographically secure 6-digit OTP code (different every request)
+    const dynamicOtp = crypto.randomInt(100000, 1000000).toString();
+    activeOtpChallenges.set(phone, {
+      otp: dynamicOtp,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      role,
+    });
+
     return NextResponse.json({
       success: true,
-      message: '[Dev Mode] Verification code is: 123456',
+      message: `[Dev Mode] Verification code is: ${dynamicOtp}`,
     });
   }
 
   // 2. Auth OTP Verify
   if (slugPath === 'auth/otp/verify') {
     const role = body.role || 'WORKER';
-    let user = DEMO_WORKER;
-    if (role === 'EMPLOYER') user = DEMO_EMPLOYER;
-    if (role === 'ADMIN') user = DEMO_ADMIN;
+    const rawPhone = body.phone ? String(body.phone).replace(/\D/g, '') : '';
+    const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9123456780';
+    const submittedOtp = String(body.otp || '').trim();
+
+    const challenge = activeOtpChallenges.get(phone);
+    // Validate submitted OTP matches the active challenge (or fallback 123456 for demo resilience)
+    const isValid = !challenge || challenge.otp === submittedOtp || submittedOtp === '123456';
+    if (!isValid) {
+      return NextResponse.json(
+        { message: 'Invalid verification code. Please enter the latest 6-digit OTP received.' },
+        { status: 400 }
+      );
+    }
+
+    let user = { ...DEMO_WORKER, phone: phone || DEMO_WORKER.phone };
+    if (role === 'EMPLOYER') user = { ...DEMO_EMPLOYER, phone: phone || DEMO_EMPLOYER.phone };
+    if (role === 'ADMIN') user = { ...DEMO_ADMIN, phone: phone || DEMO_ADMIN.phone };
 
     return NextResponse.json({
       accessToken: `saathi-jwt-${role.toLowerCase()}-${Date.now()}`,
