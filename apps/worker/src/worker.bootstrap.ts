@@ -33,6 +33,8 @@ import { BaseJobHandler } from './handlers/base.handler';
 
 export class WorkerBootstrap {
   private isRunning = false;
+  private redisRetryTimer: NodeJS.Timeout | null = null;
+  private isInitializing = false;
   private readonly startTime = Date.now();
   private redisClient: Redis | null = null;
   private prismaClient: PrismaClient | null = null;
@@ -50,97 +52,152 @@ export class WorkerBootstrap {
   async start(): Promise<void> {
     if (this.isRunning) return;
 
+    this.isRunning = true;
+
     // eslint-disable-next-line no-console
     console.info('[LocalSaathi Worker] Starting unified background worker platform...');
 
-    // 1. Initialize Redis and Prisma
-    const redisOptions = getRedisConnectionOptions();
-    this.redisClient = new Redis(redisOptions);
-    this.prismaClient = new PrismaClient();
-    this.dlqService = new DeadLetterQueueService(this.redisClient);
+    await this.initializePlatform();
+  }
 
-    // 2. Initialize Handlers
-    this.initializeHandlers();
+  private async initializePlatform(): Promise<void> {
+    if (!this.isRunning || this.isInitializing || this.redisClient) return;
+    this.isInitializing = true;
 
-    // 3. Initialize BullMQ Queues and Workers per policy
-    for (const [queueName, policy] of Object.entries(QUEUE_CONFIG_POLICIES)) {
-      const qName = queueName as QueueName;
-      const handler = this.handlers.get(qName);
+    try {
+      // 1. Initialize Redis and Prisma
+      const redisOptions = getRedisConnectionOptions();
+      const redisClient = new Redis(redisOptions);
+      this.redisClient = redisClient;
+      redisClient.on('error', () => {
+        // Redis may be down during local development; keep the worker idle without crashing the process.
+      });
 
-      if (!handler) {
+      try {
+        if (redisClient.status === 'wait') {
+          await redisClient.connect();
+        }
+        await redisClient.ping();
+      } catch (error) {
         // eslint-disable-next-line no-console
-        console.warn(`[LocalSaathi Worker] No handler registered for queue: ${qName}`);
-        continue;
+        console.warn(
+          `[LocalSaathi Worker] Redis connection failed at ${redisOptions.host}:${redisOptions.port}: ${
+            error instanceof Error ? error.message : String(error)
+          }. Retrying in 5 seconds.`,
+        );
+        redisClient.disconnect();
+        if (this.redisClient === redisClient) this.redisClient = null;
+        this.dlqService = null;
+        this.prismaClient = null;
+        this.scheduleRedisRetry();
+        return;
       }
 
-      // Initialize Queue instance
-      const queue = new Queue(qName, {
-        connection: redisOptions,
-        defaultJobOptions: {
-          attempts: policy.maxRetries,
-          backoff: {
-            type: 'exponential',
-            delay: policy.initialBackoffMs,
-          },
-          removeOnComplete: { count: 1000 },
-          removeOnFail: { count: 5000 },
-        },
-      });
-      this.queues.set(qName, queue);
+      if (!this.isRunning || this.redisClient !== redisClient) {
+        redisClient.disconnect();
+        return;
+      }
 
-      // Initialize BullMQ Worker with isolated concurrency
-      const worker = new Worker(
-        qName,
-        async (job: Job) => {
-          // Increment attempt counter in contract
-          const data = job.data;
-          if (data && typeof data === 'object') {
-            data.attemptCount = job.attemptsMade;
-          }
-          await handler.execute(data);
-        },
-        {
+      this.prismaClient = new PrismaClient();
+      this.dlqService = new DeadLetterQueueService(redisClient);
+
+      // 2. Initialize Handlers
+      this.initializeHandlers();
+
+      // 3. Initialize BullMQ Queues and Workers per policy
+      for (const [queueName, policy] of Object.entries(QUEUE_CONFIG_POLICIES)) {
+        const qName = queueName as QueueName;
+        const handler = this.handlers.get(qName);
+
+        if (!handler) {
+          // eslint-disable-next-line no-console
+          console.warn(`[LocalSaathi Worker] No handler registered for queue: ${qName}`);
+          continue;
+        }
+
+        // Initialize Queue instance
+        const queue = new Queue(qName, {
           connection: redisOptions,
-          concurrency: policy.concurrency,
-          limiter: policy.rateLimit
-            ? {
-                max: policy.rateLimit.max,
-                duration: policy.rateLimit.durationMs,
-              }
-            : undefined,
-        },
+          defaultJobOptions: {
+            attempts: policy.maxRetries,
+            backoff: {
+              type: 'exponential',
+              delay: policy.initialBackoffMs,
+            },
+            removeOnComplete: { count: 1000 },
+            removeOnFail: { count: 5000 },
+          },
+        });
+        this.queues.set(qName, queue);
+
+        // Initialize BullMQ Worker with isolated concurrency
+        const worker = new Worker(
+          qName,
+          async (job: Job) => {
+            // Increment attempt counter in contract
+            const data = job.data;
+            if (data && typeof data === 'object') {
+              data.attemptCount = job.attemptsMade;
+            }
+            await handler.execute(data);
+          },
+          {
+            connection: redisOptions,
+            concurrency: policy.concurrency,
+            limiter: policy.rateLimit
+              ? {
+                  max: policy.rateLimit.max,
+                  duration: policy.rateLimit.durationMs,
+                }
+              : undefined,
+          },
+        );
+
+        // Setup Worker-level telemetry events (does NOT crash on individual job failure)
+        worker.on('completed', (job: Job) => {
+          this.completedCount++;
+          // eslint-disable-next-line no-console
+          console.debug(`[${qName}] Job ${job.id} marked COMPLETED in queue`);
+        });
+
+        worker.on('failed', (job: Job | undefined, err: Error) => {
+          this.failedCount++;
+          // eslint-disable-next-line no-console
+          console.error(`[${qName}] Job ${job?.id || 'unknown'} FAILED: ${err.message}`);
+        });
+
+        worker.on('error', (err: Error) => {
+          // eslint-disable-next-line no-console
+          console.error(`[${qName}] Worker process error: ${err.message}`);
+        });
+
+        this.workers.set(qName, worker);
+      }
+
+      // 4. Initialize and start distributed scheduler
+      this.scheduler = new ScheduledJobsManager(redisClient, this.queues);
+      this.scheduler.start();
+
+      // eslint-disable-next-line no-console
+      console.info(
+        `[LocalSaathi Worker] Platform successfully initialized with ${this.workers.size} active worker queues.`,
       );
-
-      // Setup Worker-level telemetry events (does NOT crash on individual job failure)
-      worker.on('completed', (job: Job) => {
-        this.completedCount++;
-        // eslint-disable-next-line no-console
-        console.debug(`[${qName}] Job ${job.id} marked COMPLETED in queue`);
-      });
-
-      worker.on('failed', (job: Job | undefined, err: Error) => {
-        this.failedCount++;
-        // eslint-disable-next-line no-console
-        console.error(`[${qName}] Job ${job?.id || 'unknown'} FAILED: ${err.message}`);
-      });
-
-      worker.on('error', (err: Error) => {
-        // eslint-disable-next-line no-console
-        console.error(`[${qName}] Worker process error: ${err.message}`);
-      });
-
-      this.workers.set(qName, worker);
+    } finally {
+      this.isInitializing = false;
     }
+  }
 
-    // 4. Initialize and start distributed scheduler
-    this.scheduler = new ScheduledJobsManager(this.redisClient, this.queues);
-    this.scheduler.start();
+  private scheduleRedisRetry(): void {
+    if (!this.isRunning || this.redisRetryTimer) return;
 
-    this.isRunning = true;
-    // eslint-disable-next-line no-console
-    console.info(
-      `[LocalSaathi Worker] Platform successfully initialized with ${this.workers.size} active worker queues.`,
-    );
+    this.redisRetryTimer = setTimeout(() => {
+      this.redisRetryTimer = null;
+      void this.initializePlatform().catch((error: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[LocalSaathi Worker] Failed to initialize after Redis became available:', error);
+        this.scheduleRedisRetry();
+      });
+    }, 5000);
   }
 
   private initializeHandlers(): void {
@@ -267,6 +324,11 @@ export class WorkerBootstrap {
 
     // eslint-disable-next-line no-console
     console.info('[LocalSaathi Worker] Initiating graceful shutdown sequence...');
+
+    if (this.redisRetryTimer) {
+      clearTimeout(this.redisRetryTimer);
+      this.redisRetryTimer = null;
+    }
 
     if (this.scheduler) {
       this.scheduler.stop();

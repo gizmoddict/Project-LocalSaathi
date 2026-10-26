@@ -16,7 +16,13 @@ import {
   AnalyticsEventSource,
 } from '@localsaathi/types';
 
-describe('Analytics PostgreSQL Integration Tests', () => {
+const shouldRunDbIntegrationTests =
+  process.env.RUN_DB_INTEGRATION_TESTS === 'true' ||
+  process.env.DATABASE_INTEGRATION_TESTS === 'true';
+
+const integrationSuite = shouldRunDbIntegrationTests ? describe : describe.skip;
+
+integrationSuite('Analytics PostgreSQL Integration Tests', () => {
   let prisma: PrismaClient;
   let prismaService: PrismaService;
   let analyticsService: AnalyticsService;

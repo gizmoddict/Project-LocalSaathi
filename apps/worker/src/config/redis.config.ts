@@ -17,13 +17,20 @@ export function getRedisConnectionOptions(): RedisOptions {
   if (config.REDIS_URL) {
     try {
       const parsed = new URL(config.REDIS_URL);
+      const dbPath = parsed.pathname && parsed.pathname !== '/' ? parsed.pathname.replace('/', '') : undefined;
+      const db = dbPath && /^\d+$/.test(dbPath) ? Number.parseInt(dbPath, 10) : undefined;
+
       return {
         host: parsed.hostname || '127.0.0.1',
         port: parseInt(parsed.port || '6379', 10),
         password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
         username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+        db,
+        tls: parsed.protocol === 'rediss:' ? {} : undefined,
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
+        lazyConnect: true,
+        enableOfflineQueue: false,
       };
     } catch {
       // Fallback if URL parsing fails
@@ -36,5 +43,7 @@ export function getRedisConnectionOptions(): RedisOptions {
     password: config.REDIS_PASSWORD || undefined,
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    lazyConnect: true,
+    enableOfflineQueue: false,
   };
 }

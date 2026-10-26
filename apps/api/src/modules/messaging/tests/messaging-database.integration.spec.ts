@@ -12,7 +12,13 @@ import * as path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../../../../.env') });
 
-describe('Messaging Database Integration Tests (PostgreSQL)', () => {
+const shouldRunDbIntegrationTests =
+  process.env.RUN_DB_INTEGRATION_TESTS === 'true' ||
+  process.env.DATABASE_INTEGRATION_TESTS === 'true';
+
+const integrationSuite = shouldRunDbIntegrationTests ? describe : describe.skip;
+
+integrationSuite('Messaging Database Integration Tests (PostgreSQL)', () => {
   let prisma: PrismaClient;
   let conversationService: ConversationService;
   let messageService: MessageService;

@@ -148,7 +148,16 @@ async function bootstrap() {
     logger.log(`OpenAPI documentation available at http://localhost:${config.API_PORT}/api/docs`);
   }
 
-  await app.listen(config.API_PORT);
+  try {
+    await app.listen(config.API_PORT);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE') {
+      logger.error(
+        `Port ${config.API_PORT} is already in use. Stop the existing API process or set API_PORT to an unused port before restarting.`,
+      );
+    }
+    throw error;
+  }
   logger.log(`LocalSaathi API v1 listening on port ${config.API_PORT} in ${config.NODE_ENV} mode`);
 
   const shutdownTimeoutMs = parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS || '10000', 10);
