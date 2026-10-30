@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button } from '@localsaathi/ui';
 import { employerApi } from '../../../../lib/api-client';
+import { reverseGeocode } from '../../../../lib/geocoding';
 import {
   Briefcase,
   ArrowLeft,
@@ -19,6 +20,7 @@ export default function CreateJobPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const [form, setForm] = useState({
     title: '',
@@ -86,6 +88,52 @@ export default function CreateJobPage() {
       setErrorMsg(msg);
       setLoading(false);
     }
+  };
+
+  const useMyLocation = () => {
+    if (!window.isSecureContext) {
+      setErrorMsg('Current location requires a secure connection (HTTPS or localhost).');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setErrorMsg('Location is not available in this browser.');
+      return;
+    }
+
+    setLocating(true);
+    setErrorMsg(null);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const location = await reverseGeocode(coords.latitude, coords.longitude);
+          setForm((current) => ({
+            ...current,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            addressLine: location.addressLine || current.addressLine,
+            locality: location.locality || current.locality,
+            city: location.city || current.city,
+            state: location.state || current.state,
+            pinCode: location.pinCode || current.pinCode,
+          }));
+        } catch {
+          setForm((current) => ({ ...current, latitude: coords.latitude, longitude: coords.longitude }));
+          setErrorMsg('Coordinates updated, but the address could not be looked up. Please check the address fields.');
+        } finally {
+          setLocating(false);
+        }
+      },
+      (error) => {
+        setLocating(false);
+        setErrorMsg(error.code === error.PERMISSION_DENIED
+          ? 'Location access was denied. Allow location access in your browser and try again.'
+          : error.code === error.TIMEOUT
+            ? 'Finding your location took too long. Please try again.'
+            : 'Could not get your location. Check your browser location settings and try again.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
   };
 
   return (
@@ -325,6 +373,16 @@ export default function CreateJobPage() {
                 <MapPin className="w-5 h-5 text-blue-600" />
                 4. Job Location & Address
               </h3>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={locating || loading}
+                onClick={useMyLocation}
+                className="mb-4 flex items-center gap-2"
+              >
+                <MapPin className="w-4 h-4" />
+                {locating ? 'Finding your location…' : 'Use my location'}
+              </Button>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
