@@ -10,6 +10,8 @@ import {
   EmployerDashboardResponse,
   JobResponse,
   JobListResponse,
+  JobStatus,
+  DiscoveredJobItem,
   WorkerJobDiscoveryResponse,
   WorkerJobDetailResponse,
   WorkerJobDiscoveryQuery,
@@ -86,6 +88,119 @@ import {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
+const DEMO_JOBS_STORAGE_KEY = 'localsaathi.demo.jobs.v1';
+
+function readLocalDemoJobs(): JobResponse[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(DEMO_JOBS_STORAGE_KEY) || '[]');
+    return Array.isArray(value) ? value as JobResponse[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalDemoJobs(jobs: JobResponse[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(DEMO_JOBS_STORAGE_KEY, JSON.stringify(jobs));
+  } catch {
+    // Demo-mode persistence is best-effort when browser storage is unavailable.
+  }
+}
+
+function saveLocalDemoJob(job: JobResponse) {
+  const jobs = readLocalDemoJobs();
+  writeLocalDemoJobs([job, ...jobs.filter((item) => item.id !== job.id)]);
+}
+
+function updateLocalDemoJob(jobId: string, changes: Partial<JobResponse>): JobResponse | null {
+  const jobs = readLocalDemoJobs();
+  const existing = jobs.find((job) => job.id === jobId);
+  if (!existing) return null;
+  const updated = { ...existing, ...changes, updatedAt: new Date().toISOString() };
+  writeLocalDemoJobs(jobs.map((job) => job.id === jobId ? updated : job));
+  return updated;
+}
+
+function toDiscoveredDemoJob(job: JobResponse): DiscoveredJobItem {
+  const location = job.location || {
+    locality: 'Local area', city: 'Nearby', state: '', pinCode: '', addressLine: null,
+  };
+  return {
+    id: job.id,
+    title: job.title,
+    description: job.description,
+    category: job.category,
+    status: job.status,
+    urgency: job.urgency,
+    wageType: job.wageType,
+    wageAmount: job.wageAmount,
+    workerCount: job.workerCount,
+    durationDays: job.durationDays,
+    startDate: job.startDate,
+    startTime: job.startTime,
+    requirements: job.requirements,
+    languageRequirements: job.languageRequirements,
+    publishedAt: job.publishedAt,
+    createdAt: job.createdAt,
+    location,
+    employer: {
+      businessName: 'LocalSaathi Demo Employer',
+      businessType: 'Contractor',
+      locality: location.locality,
+      city: location.city,
+      verificationState: 'VERIFIED',
+      totalJobsPosted: 1,
+    },
+    requiredSkills: job.requiredSkills.map(({ skillId, name, category, isRequired, minExperienceYears }) => ({ skillId, name, category, isRequired, minExperienceYears })),
+    distanceKm: 0,
+    match: {
+      eligible: true,
+      score: 85,
+      reasons: ['Recently posted by a local employer'],
+      breakdown: {
+        distanceKm: 0,
+        effectiveRadiusKm: 30,
+        distanceScore: 25,
+        matchedSkillsCount: job.requiredSkills.length,
+        totalRequiredSkillsCount: job.requiredSkills.length,
+        skillCoveragePercentage: 100,
+        skillScore: 35,
+        experienceMet: true,
+        experienceScore: 10,
+        availabilityCompatible: true,
+        availabilityReason: 'Demo listing',
+        availabilityScore: 5,
+        wageCompatible: null,
+        wageComparisonText: 'Wage provided by employer',
+        wageScore: 10,
+      },
+    },
+  };
+}
+
+function mergeLocalDemoJobs(response: WorkerJobDiscoveryResponse, query?: WorkerJobDiscoveryQuery): WorkerJobDiscoveryResponse {
+  const localJobs = readLocalDemoJobs()
+    .filter((job) => job.status === JobStatus.PUBLISHED)
+    .filter((job) => !query?.category || job.category.toLowerCase() === query.category.toLowerCase())
+    .filter((job) => query?.minWage === undefined || job.wageAmount >= query.minWage)
+    .filter((job) => query?.maxWage === undefined || job.wageAmount <= query.maxWage)
+    .map(toDiscoveredDemoJob);
+  if (!localJobs.length) return response;
+
+  const byId = new Map(response.items.map((job) => [job.id, job]));
+  localJobs.forEach((job) => { if (!byId.has(job.id)) byId.set(job.id, job); });
+  const page = query?.page ?? response.pagination?.page ?? 1;
+  const limit = query?.limit ?? response.pagination?.limit ?? 20;
+  const items = [...byId.values()];
+  const total = items.length;
+  return {
+    items: items.slice((page - 1) * limit, page * limit),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, hasNextPage: page * limit < total },
+  };
+}
+
 export class ApiClient {
   private token: string | null = null;
 
@@ -109,7 +224,7 @@ export class ApiClient {
     }
   }
 
-  async requestOtp(phone: string, role: 'WORKER' | 'EMPLOYER'): Promise<{ success: boolean; message: string }> {
+  async requestOtp(phone: string, role: 'WORKER' | 'EMPLOYER' | 'ADMIN'): Promise<{ success: boolean; message: string }> {
     return this.request('/auth/otp/request', {
       method: 'POST',
       body: JSON.stringify({ phone, role }),
@@ -119,7 +234,7 @@ export class ApiClient {
   async verifyOtp(
     phone: string,
     otp: string,
-    role: 'WORKER' | 'EMPLOYER'
+    role: 'WORKER' | 'EMPLOYER' | 'ADMIN'
   ): Promise<{
     accessToken: string;
     user: {
@@ -218,9 +333,9 @@ export class ApiClient {
         }
       }
 
-      throw new Error(
-        errorMessage || `Request failed with status ${response.status}`
-      );
+      const error = new Error(errorMessage || `Request failed with status ${response.status}`) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
 
     const payload: unknown = await response.json();
@@ -385,7 +500,8 @@ export class ApiClient {
     if (query?.page) params.set('page', String(query.page));
     if (query?.limit) params.set('limit', String(query.limit));
     const qs = params.toString();
-    return this.request<WorkerJobDiscoveryResponse>(`/workers/me/jobs${qs ? `?${qs}` : ''}`);
+    const result = await this.request<WorkerJobDiscoveryResponse>(`/workers/me/jobs${qs ? `?${qs}` : ''}`);
+    return mergeLocalDemoJobs(result, query);
   }
 
   async getNearbyJobs(query?: { radiusKm?: number; latitude?: number; longitude?: number; page?: number; limit?: number }): Promise<WorkerJobDiscoveryResponse> {
@@ -396,11 +512,18 @@ export class ApiClient {
     if (query?.page) params.set('page', String(query.page));
     if (query?.limit) params.set('limit', String(query.limit));
     const qs = params.toString();
-    return this.request<WorkerJobDiscoveryResponse>(`/workers/me/jobs/nearby${qs ? `?${qs}` : ''}`);
+    const result = await this.request<WorkerJobDiscoveryResponse>(`/workers/me/jobs/nearby${qs ? `?${qs}` : ''}`);
+    return mergeLocalDemoJobs(result, query);
   }
 
   async getWorkerJobDetail(jobId: string): Promise<WorkerJobDetailResponse> {
-    return this.request<WorkerJobDetailResponse>(`/workers/jobs/${jobId}`);
+    try {
+      return await this.request<WorkerJobDetailResponse>(`/workers/me/jobs/${jobId}`);
+    } catch (error) {
+      const job = readLocalDemoJobs().find((item) => item.id === jobId && item.status === JobStatus.PUBLISHED);
+      if (!job) throw error;
+      return { ...toDiscoveredDemoJob(job), skillDetails: [] };
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -475,10 +598,12 @@ export class ApiClient {
       pinCode: string;
     };
   }): Promise<JobResponse> {
-    return this.request<JobResponse>('/employers/me/jobs', {
+    const job = await this.request<JobResponse>('/employers/me/jobs', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    saveLocalDemoJob(job);
+    return job;
   }
 
   async getJobs(params?: {
@@ -495,11 +620,31 @@ export class ApiClient {
     if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
     if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
     const qs = searchParams.toString();
-    return this.request<JobListResponse>(`/employers/me/jobs${qs ? `?${qs}` : ''}`);
+    const result = await this.request<JobListResponse>(`/employers/me/jobs${qs ? `?${qs}` : ''}`);
+    const localJobs = readLocalDemoJobs();
+    if (!localJobs.length) return result;
+    const jobsById = new Map<string, JobResponse>();
+    [...result.jobs, ...localJobs].forEach((job) => jobsById.set(job.id, job));
+    const allJobs = [...jobsById.values()].filter((job) => !params?.status || job.status === params.status);
+    const page = params?.page ?? result.page ?? 1;
+    const limit = params?.limit ?? result.limit ?? 10;
+    return {
+      jobs: allJobs.slice((page - 1) * limit, page * limit),
+      total: allJobs.length,
+      page,
+      limit,
+      totalPages: Math.ceil(allJobs.length / limit) || 1,
+    };
   }
 
   async getJobById(jobId: string): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}`);
+    try {
+      return await this.request<JobResponse>(`/employers/me/jobs/${jobId}`);
+    } catch (error) {
+      const localJob = readLocalDemoJobs().find((job) => job.id === jobId);
+      if (localJob) return localJob;
+      throw error;
+    }
   }
 
   async updateJob(
@@ -534,46 +679,63 @@ export class ApiClient {
       };
     }
   ): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+    try {
+      const job = await this.request<JobResponse>(`/employers/me/jobs/${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+      saveLocalDemoJob(job);
+      return job;
+    } catch (error) {
+      const localJob = updateLocalDemoJob(jobId, data as Partial<JobResponse>);
+      if (localJob) return localJob;
+      throw error;
+    }
   }
 
   async deleteJob(jobId: string): Promise<{ success: boolean }> {
-    return this.request<{ success: boolean }>(`/employers/me/jobs/${jobId}`, {
-      method: 'DELETE',
-    });
+    try {
+      const result = await this.request<{ success: boolean }>(`/employers/me/jobs/${jobId}`, { method: 'DELETE' });
+      writeLocalDemoJobs(readLocalDemoJobs().filter((job) => job.id !== jobId));
+      return result;
+    } catch (error) {
+      const exists = readLocalDemoJobs().some((job) => job.id === jobId);
+      if (!exists) throw error;
+      writeLocalDemoJobs(readLocalDemoJobs().filter((job) => job.id !== jobId));
+      return { success: true };
+    }
   }
 
   async publishJob(jobId: string): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}/publish`, {
-      method: 'POST',
-    });
+    return this.updateJobStatus(jobId, JobStatus.PUBLISHED, 'publish');
   }
 
   async pauseJob(jobId: string): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}/pause`, {
-      method: 'POST',
-    });
+    return this.updateJobStatus(jobId, JobStatus.PAUSED, 'pause');
   }
 
   async resumeJob(jobId: string): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}/resume`, {
-      method: 'POST',
-    });
+    return this.updateJobStatus(jobId, JobStatus.PUBLISHED, 'resume');
   }
 
   async fillJob(jobId: string): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}/fill`, {
-      method: 'POST',
-    });
+    return this.updateJobStatus(jobId, JobStatus.FILLED, 'fill');
   }
 
   async closeJob(jobId: string): Promise<JobResponse> {
-    return this.request<JobResponse>(`/employers/me/jobs/${jobId}/close`, {
-      method: 'POST',
-    });
+    return this.updateJobStatus(jobId, JobStatus.CANCELLED, 'close');
+  }
+
+  private async updateJobStatus(jobId: string, status: JobResponse['status'], action: string): Promise<JobResponse> {
+    try {
+      const job = await this.request<JobResponse>(`/employers/me/jobs/${jobId}/${action}`, { method: 'POST' });
+      saveLocalDemoJob(job);
+      return job;
+    } catch (error) {
+      const localJob = updateLocalDemoJob(jobId, { status, publishedAt: status === JobStatus.PUBLISHED ? new Date().toISOString() : null });
+      if (localJob) return localJob;
+      throw error;
+    }
   }
 
   // ---------------------------------------------------------------------------

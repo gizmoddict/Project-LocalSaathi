@@ -46,11 +46,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const handleAdminDemoLogin = async () => {
     setBusy(true);
     try {
-      // Use seeded Admin user phone (9991587148)
-      const req = await apiClient.requestOtp('9991587148', 'WORKER');
+      // Use the demo Admin identity exposed by the serverless auth route.
+      const req = await apiClient.requestOtp('9999999999', 'ADMIN');
       const match = req.message.match(/\[Dev Mode\] Verification code is:\s*(\d{6})/);
       const code = match ? match[1] : '123456';
-      const res = await apiClient.verifyOtp('9991587148', code, 'WORKER');
+      const res = await apiClient.verifyOtp('9999999999', code, 'ADMIN');
       apiClient.setToken(res.accessToken);
       if (typeof window !== 'undefined') {
         localStorage.setItem('user', JSON.stringify(res.user));

@@ -10,6 +10,96 @@ import {
   DEMO_BOOKINGS,
   DEMO_NOTIFICATIONS,
 } from '@/lib/serverless-data';
+import prisma from '@/lib/prisma';
+import { createJobSchema } from '@/validation/job.schema';
+
+export const runtime = 'nodejs';
+
+const employerJobInclude = {
+  jobRequiredSkills: { include: { skill: { select: { name: true, category: true } } } },
+  jobLocation: true,
+  employerProfile: { select: { businessName: true, businessType: true, locality: true, city: true, verificationState: true, totalJobsPosted: true } },
+} as const;
+
+async function getDemoEmployerProfile() {
+  // The bundled OTP flow issues demo tokens, so resolve the seeded demo account
+  // by its phone number instead of using the non-UUID demo ID as a DB foreign key.
+  return prisma.employerProfile.findFirst({
+    where: { user: { phone: DEMO_EMPLOYER.phone, role: 'EMPLOYER', deletedAt: null }, deletedAt: null },
+  });
+}
+
+function toJobResponse(job: any) {
+  return {
+    ...job,
+    wageAmount: Number(job.wageAmount),
+    startDate: job.startDate instanceof Date ? job.startDate.toISOString().slice(0, 10) : job.startDate,
+    requiredSkills: (job.jobRequiredSkills || []).map((item: any) => ({
+      id: item.id,
+      skillId: item.skillId,
+      name: item.skill.name,
+      category: item.skill.category,
+      isRequired: item.isRequired,
+      minExperienceYears: item.minExperienceYears,
+    })),
+    location: job.jobLocation || null,
+    employer: job.employerProfile ? {
+      businessName: job.employerProfile.businessName,
+      businessType: job.employerProfile.businessType,
+      locality: job.employerProfile.locality,
+      city: job.employerProfile.city,
+      verificationState: job.employerProfile.verificationState,
+      totalJobsPosted: job.employerProfile.totalJobsPosted,
+    } : {
+      businessName: DEMO_EMPLOYER_PROFILE.businessName,
+      businessType: DEMO_EMPLOYER_PROFILE.businessType,
+      locality: DEMO_EMPLOYER_PROFILE.locality,
+      city: DEMO_EMPLOYER_PROFILE.city,
+      verificationState: 'VERIFIED',
+      totalJobsPosted: 1,
+    },
+    distanceKm: 0,
+    match: {
+      eligible: true,
+      score: 85,
+      reasons: ['Recently posted by a local employer'],
+      breakdown: {
+        distanceKm: 0, effectiveRadiusKm: 30, distanceScore: 25,
+        matchedSkillsCount: (job.jobRequiredSkills || []).length,
+        totalRequiredSkillsCount: (job.jobRequiredSkills || []).length,
+        skillCoveragePercentage: 100, skillScore: 35, experienceMet: true,
+        experienceScore: 10, availabilityCompatible: true, availabilityReason: 'Listing available',
+        availabilityScore: 5, wageCompatible: null, wageComparisonText: 'Wage provided by employer', wageScore: 10,
+      },
+    },
+    jobRequiredSkills: undefined,
+    jobLocation: undefined,
+  };
+}
+
+function databaseUnavailable() {
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL_POOLED || process.env.DATABASE_URL);
+  return NextResponse.json(
+    {
+      message: hasDatabaseUrl
+        ? 'Job database is unavailable. Check the Vercel database connection, apply Prisma migrations, and seed the demo employer.'
+        : 'Job posting needs a persistent Postgres database. Add DATABASE_URL and DATABASE_URL_POOLED to this Vercel project, then redeploy.',
+    },
+    { status: 503 },
+  );
+}
+
+const hasPersistentDatabase = () => Boolean(process.env.DATABASE_URL_POOLED || process.env.DATABASE_URL);
+
+function listRuntimeJobs(query: Record<string, string>, publishedOnly = false) {
+  let jobs = [...runtimeJobs];
+  if (publishedOnly) jobs = jobs.filter((job) => job.status === 'PUBLISHED');
+  if (query.status) jobs = jobs.filter((job) => job.status === query.status);
+  if (query.category) jobs = jobs.filter((job) => job.category?.toLowerCase() === query.category.toLowerCase());
+  const page = Math.max(1, Number(query.page || 1));
+  const limit = Math.min(100, Math.max(1, Number(query.limit || 10)));
+  return { jobs: jobs.slice((page - 1) * limit, page * limit), total: jobs.length, page, limit, totalPages: Math.ceil(jobs.length / limit) || 1 };
+}
 
 // In-memory active OTP challenge store: phone -> { otp, expiresAt, role }
 const activeOtpChallenges = new Map<string, { otp: string; expiresAt: number; role: string }>();
@@ -26,7 +116,7 @@ function parseQueryParams(req: NextRequest) {
 
 // In-memory runtime state for active session mutations
 let runtimeWorkerProfile = { ...DEMO_WORKER_PROFILE };
-let runtimeJobs = [...DEMO_JOBS];
+let runtimeJobs: any[] = [...DEMO_JOBS];
 let runtimeBookings = [...DEMO_BOOKINGS];
 let runtimeNotifications = [...DEMO_NOTIFICATIONS];
 
@@ -36,6 +126,44 @@ export async function GET(
 ) {
   const slugPath = (params.slug || []).join('/');
   const query = parseQueryParams(req);
+
+  if (slugPath === 'employers/me/jobs') {
+    if (!hasPersistentDatabase()) {
+      const result = listRuntimeJobs(query);
+      return NextResponse.json(result);
+    }
+    try {
+      const employer = await getDemoEmployerProfile();
+      if (!employer) return NextResponse.json({ message: 'Employer account is not seeded in the database.' }, { status: 404 });
+      const page = Math.max(1, Number(query.page || 1));
+      const limit = Math.min(100, Math.max(1, Number(query.limit || 10)));
+      const where = { employerProfileId: employer.id, deletedAt: null, ...(query.status ? { status: query.status as any } : {}) };
+      const [jobs, total] = await Promise.all([
+        prisma.jobPost.findMany({ where, include: employerJobInclude, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+        prisma.jobPost.count({ where }),
+      ]);
+      return NextResponse.json({ jobs: jobs.map(toJobResponse), total, page, limit, totalPages: Math.ceil(total / limit) || 1 });
+    } catch (error) {
+      console.error('Failed to list employer jobs:', error);
+      return databaseUnavailable();
+    }
+  }
+  if (slugPath.startsWith('employers/me/jobs/')) {
+    const jobId = slugPath.split('/')[3];
+    if (!hasPersistentDatabase()) {
+      const job = runtimeJobs.find((item) => item.id === jobId);
+      return job ? NextResponse.json(job) : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    }
+    try {
+      const employer = await getDemoEmployerProfile();
+      if (!employer) return NextResponse.json({ message: 'Employer account is not seeded in the database.' }, { status: 404 });
+      const job = await prisma.jobPost.findFirst({ where: { id: jobId, employerProfileId: employer.id, deletedAt: null }, include: employerJobInclude });
+      return job ? NextResponse.json(toJobResponse(job)) : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    } catch (error) {
+      console.error('Failed to get employer job:', error);
+      return databaseUnavailable();
+    }
+  }
 
   // 1. Auth & Current User
   if (slugPath === 'auth/me') {
@@ -66,21 +194,43 @@ export async function GET(
     return NextResponse.json(runtimeWorkerProfile.completion);
   }
   if (slugPath === 'workers/me/jobs' || slugPath === 'workers/me/jobs/nearby') {
-    let items = [...runtimeJobs];
-    if (query.category) {
-      items = items.filter((j) => j.category.toLowerCase() === query.category.toLowerCase());
+    if (!hasPersistentDatabase()) {
+      const result = listRuntimeJobs(query, true);
+      return NextResponse.json({
+        items: result.jobs,
+        pagination: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages, hasNextPage: result.page < result.totalPages },
+      });
     }
-    return NextResponse.json({
-      items,
-      total: items.length,
-      page: Number(query.page || 1),
-      limit: Number(query.limit || 10),
-    });
+    try {
+      const page = Math.max(1, Number(query.page || 1));
+      const limit = Math.min(100, Math.max(1, Number(query.limit || 10)));
+      const where = { status: 'PUBLISHED' as const, deletedAt: null, ...(query.category ? { category: { equals: query.category, mode: 'insensitive' as const } } : {}) };
+      const [jobs, total] = await Promise.all([
+        prisma.jobPost.findMany({ where, include: employerJobInclude, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+        prisma.jobPost.count({ where }),
+      ]);
+      return NextResponse.json({
+        items: jobs.map(toJobResponse),
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, hasNextPage: page * limit < total },
+      });
+    } catch (error) {
+      console.error('Failed to list published jobs:', error);
+      return databaseUnavailable();
+    }
   }
   if (slugPath.startsWith('workers/me/jobs/')) {
     const jobId = slugPath.replace('workers/me/jobs/', '');
-    const job = runtimeJobs.find((j) => j.id === jobId) || runtimeJobs[0];
-    return NextResponse.json(job);
+    if (!hasPersistentDatabase()) {
+      const job = runtimeJobs.find((item) => item.id === jobId && item.status === 'PUBLISHED');
+      return job ? NextResponse.json(job) : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    }
+    try {
+      const job = await prisma.jobPost.findFirst({ where: { id: jobId, status: 'PUBLISHED', deletedAt: null }, include: employerJobInclude });
+      return job ? NextResponse.json(toJobResponse(job)) : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    } catch (error) {
+      console.error('Failed to load published job:', error);
+      return databaseUnavailable();
+    }
   }
 
   // 3. Trade Catalog
@@ -128,17 +278,37 @@ export async function GET(
 
   // 5. Jobs List
   if (slugPath === 'jobs') {
-    return NextResponse.json({
-      items: runtimeJobs,
-      total: runtimeJobs.length,
-      page: Number(query.page || 1),
-      limit: Number(query.limit || 10),
-    });
+    if (!hasPersistentDatabase()) {
+      const result = listRuntimeJobs(query, true);
+      return NextResponse.json({ items: result.jobs, total: result.total, page: result.page, limit: result.limit });
+    }
+    try {
+      const page = Math.max(1, Number(query.page || 1));
+      const limit = Math.min(100, Math.max(1, Number(query.limit || 10)));
+      const where = { status: 'PUBLISHED' as const, deletedAt: null };
+      const [jobs, total] = await Promise.all([
+        prisma.jobPost.findMany({ where, include: employerJobInclude, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+        prisma.jobPost.count({ where }),
+      ]);
+      return NextResponse.json({ items: jobs.map(toJobResponse), total, page, limit });
+    } catch (error) {
+      console.error('Failed to list public jobs:', error);
+      return databaseUnavailable();
+    }
   }
   if (slugPath.startsWith('jobs/') && !slugPath.includes('/applications')) {
     const jobId = slugPath.replace('jobs/', '');
-    const job = runtimeJobs.find((j) => j.id === jobId) || runtimeJobs[0];
-    return NextResponse.json(job);
+    if (!hasPersistentDatabase()) {
+      const job = runtimeJobs.find((item) => item.id === jobId && item.status === 'PUBLISHED');
+      return job ? NextResponse.json(job) : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    }
+    try {
+      const job = await prisma.jobPost.findFirst({ where: { id: jobId, status: 'PUBLISHED', deletedAt: null }, include: employerJobInclude });
+      return job ? NextResponse.json(toJobResponse(job)) : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    } catch (error) {
+      console.error('Failed to load public job:', error);
+      return databaseUnavailable();
+    }
   }
 
   // 6. Applications & Bookings
@@ -264,6 +434,151 @@ export async function POST(
     body = await req.json();
   } catch {
     body = {};
+  }
+
+  if (slugPath === 'employers/me/jobs') {
+    const parsed = createJobSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ message: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`) }, { status: 400 });
+    }
+    try {
+      if (!hasPersistentDatabase()) {
+        const now = new Date().toISOString();
+        const data = parsed.data;
+        const id = `demo-job-${Date.now()}`;
+        const newJob = {
+          id,
+          employerProfileId: 'employer-demo-1',
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          status: 'DRAFT',
+          urgency: data.urgency,
+          wageType: data.wageType,
+          wageAmount: data.wageAmount,
+          workerCount: data.workerCount,
+          durationDays: data.durationDays,
+          startDate: data.startDate,
+          startTime: data.startTime ?? null,
+          requirements: data.requirements,
+          languageRequirements: data.languageRequirements,
+          publishedAt: null,
+          expiresAt: null,
+          createdAt: now,
+          updatedAt: now,
+          location: data.location ? { ...data.location, id: `demo-location-${id}`, jobPostId: id, addressLine: data.location.addressLine ?? null } : null,
+          employer: {
+            id: 'employer-demo-1',
+            businessName: DEMO_EMPLOYER_PROFILE.businessName,
+            businessType: DEMO_EMPLOYER_PROFILE.businessType,
+            locality: DEMO_EMPLOYER_PROFILE.locality,
+            city: DEMO_EMPLOYER_PROFILE.city,
+            verificationState: 'VERIFIED',
+            totalJobsPosted: 1,
+          },
+          distanceKm: 0,
+          match: {
+            eligible: true,
+            score: 85,
+            reasons: ['Recently posted by a local employer'],
+            breakdown: {
+              distanceKm: 0,
+              effectiveRadiusKm: 30,
+              distanceScore: 25,
+              matchedSkillsCount: (data.skills || []).length,
+              totalRequiredSkillsCount: (data.skills || []).length,
+              skillCoveragePercentage: 100,
+              skillScore: 35,
+              experienceMet: true,
+              experienceScore: 10,
+              availabilityCompatible: true,
+              availabilityReason: 'Demo listing',
+              availabilityScore: 5,
+              wageCompatible: null,
+              wageComparisonText: 'Wage provided by employer',
+              wageScore: 10,
+            },
+          },
+          requiredSkills: (data.skills || []).map((skill, index) => ({
+            id: `demo-skill-${id}-${index}`,
+            skillId: skill.skillId || `demo-skill-${index}`,
+            name: skill.name || 'Trade Skill',
+            category: data.category,
+            isRequired: skill.isRequired,
+            minExperienceYears: skill.minExperienceYears,
+          })),
+        };
+        runtimeJobs.unshift(newJob);
+        return NextResponse.json(newJob, { status: 201 });
+      }
+      const employer = await getDemoEmployerProfile();
+      if (!employer) return NextResponse.json({ message: 'Employer account is not seeded in the database.' }, { status: 404 });
+      const data = parsed.data;
+      const skills = await Promise.all((data.skills || []).map(async (skill) => {
+        if (skill.skillId) return { skillId: skill.skillId, isRequired: skill.isRequired, minExperienceYears: skill.minExperienceYears };
+        const normalizedName = skill.name!.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const record = await prisma.skill.upsert({ where: { normalizedName }, update: {}, create: { name: skill.name!.trim(), normalizedName, category: data.category, isActive: true } });
+        return { skillId: record.id, isRequired: skill.isRequired, minExperienceYears: skill.minExperienceYears };
+      }));
+      const job = await prisma.$transaction(async (tx) => {
+        const created = await tx.jobPost.create({
+          data: {
+            employerProfileId: employer.id,
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            wageType: data.wageType,
+            wageAmount: data.wageAmount,
+            workerCount: data.workerCount,
+            durationDays: data.durationDays,
+            startDate: new Date(`${data.startDate}T00:00:00.000Z`),
+            startTime: data.startTime,
+            urgency: data.urgency,
+            requirements: data.requirements,
+            languageRequirements: data.languageRequirements,
+            jobRequiredSkills: { create: skills },
+            ...(data.location ? { jobLocation: { create: data.location } } : {}),
+          },
+          include: employerJobInclude,
+        });
+        await tx.employerProfile.update({ where: { id: employer.id }, data: { totalJobsPosted: { increment: 1 } } });
+        return created;
+      });
+      return NextResponse.json(toJobResponse(job), { status: 201 });
+    } catch (error) {
+      console.error('Failed to create employer job:', error);
+      return databaseUnavailable();
+    }
+  }
+  const jobAction = slugPath.match(/^employers\/me\/jobs\/([^/]+)\/(publish|pause|resume|fill|close)$/);
+  if (jobAction) {
+    const [, jobId, action] = jobAction;
+    const statusByAction = { publish: 'PUBLISHED', pause: 'PAUSED', resume: 'PUBLISHED', fill: 'FILLED', close: 'CANCELLED' } as const;
+    try {
+      if (!hasPersistentDatabase()) {
+        const job = runtimeJobs.find((item) => item.id === jobId);
+        if (!job) return NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+        job.status = statusByAction[action as keyof typeof statusByAction];
+        job.publishedAt = job.status === 'PUBLISHED' ? new Date().toISOString() : null;
+        job.updatedAt = new Date().toISOString();
+        return NextResponse.json(job);
+      }
+      const employer = await getDemoEmployerProfile();
+      if (!employer) return NextResponse.json({ message: 'Employer account is not seeded in the database.' }, { status: 404 });
+      const updated = await prisma.jobPost.updateMany({
+        where: { id: jobId, employerProfileId: employer.id, deletedAt: null },
+        data: {
+          status: statusByAction[action as keyof typeof statusByAction],
+          ...(action === 'publish' || action === 'resume' ? { publishedAt: new Date() } : {}),
+        },
+      });
+      if (!updated.count) return NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+      const job = await prisma.jobPost.findUnique({ where: { id: jobId }, include: employerJobInclude });
+      return NextResponse.json(toJobResponse(job));
+    } catch (error) {
+      console.error(`Failed to ${action} employer job:`, error);
+      return databaseUnavailable();
+    }
   }
 
   // 1. Auth OTP Request
@@ -462,6 +777,32 @@ export async function PATCH(
     body = {};
   }
 
+  const employerJobId = slugPath.match(/^employers\/me\/jobs\/([^/]+)$/)?.[1];
+  if (employerJobId) {
+    if (!hasPersistentDatabase()) {
+      const job = runtimeJobs.find((item) => item.id === employerJobId);
+      if (!job) return NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+      Object.assign(job, body, { updatedAt: new Date().toISOString() });
+      return NextResponse.json(job);
+    }
+    try {
+      const employer = await getDemoEmployerProfile();
+      if (!employer) return NextResponse.json({ message: 'Employer account is not seeded in the database.' }, { status: 404 });
+      const data: Record<string, unknown> = {};
+      for (const key of ['title', 'description', 'category', 'wageType', 'wageAmount', 'workerCount', 'durationDays', 'startTime', 'urgency', 'requirements', 'languageRequirements']) {
+        if (body[key] !== undefined) data[key] = body[key];
+      }
+      if (body.startDate) data.startDate = new Date(`${body.startDate}T00:00:00.000Z`);
+      const updated = await prisma.jobPost.updateMany({ where: { id: employerJobId, employerProfileId: employer.id, deletedAt: null }, data: data as any });
+      if (!updated.count) return NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+      const job = await prisma.jobPost.findUnique({ where: { id: employerJobId }, include: employerJobInclude });
+      return NextResponse.json(toJobResponse(job));
+    } catch (error) {
+      console.error('Failed to update employer job:', error);
+      return databaseUnavailable();
+    }
+  }
+
   if (slugPath === 'workers/me') {
     runtimeWorkerProfile = { ...runtimeWorkerProfile, ...body };
     return NextResponse.json(runtimeWorkerProfile);
@@ -483,6 +824,27 @@ export async function DELETE(
   { params }: { params: { slug: string[] } }
 ) {
   const slugPath = (params.slug || []).join('/');
+  const employerJobId = slugPath.match(/^employers\/me\/jobs\/([^/]+)$/)?.[1];
+  if (employerJobId) {
+    if (!hasPersistentDatabase()) {
+      const exists = runtimeJobs.some((job) => job.id === employerJobId);
+      runtimeJobs = runtimeJobs.filter((job) => job.id !== employerJobId);
+      return exists
+        ? NextResponse.json({ success: true })
+        : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    }
+    try {
+      const employer = await getDemoEmployerProfile();
+      if (!employer) return NextResponse.json({ message: 'Employer account is not seeded in the database.' }, { status: 404 });
+      const deleted = await prisma.jobPost.updateMany({ where: { id: employerJobId, employerProfileId: employer.id, deletedAt: null }, data: { deletedAt: new Date() } });
+      return deleted.count
+        ? NextResponse.json({ success: true })
+        : NextResponse.json({ message: 'Job not found.' }, { status: 404 });
+    } catch (error) {
+      console.error('Failed to delete employer job:', error);
+      return databaseUnavailable();
+    }
+  }
   return NextResponse.json({
     success: true,
     message: `Resource deleted at ${slugPath}`,

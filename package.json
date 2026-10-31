@@ -12,6 +12,9 @@
     "postinstall": "prisma generate",
     "clean": "rimraf .next dist *.tsbuildinfo"
   },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "leaflet": "^1.9.4",

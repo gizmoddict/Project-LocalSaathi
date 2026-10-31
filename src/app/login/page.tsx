@@ -63,8 +63,7 @@ export default function LoginPage() {
     setDevCode(null);
 
     try {
-      const sendRole = role === 'ADMIN' ? 'WORKER' : role;
-      const result = await apiClient.requestOtp(nationalNumber, sendRole);
+      const result = await apiClient.requestOtp(nationalNumber, role);
       setOtpRequested(true);
       setNotice(result.message);
 
@@ -87,8 +86,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const sendRole = role === 'ADMIN' ? 'WORKER' : role;
-      const result = await apiClient.verifyOtp(nationalNumber, otp.trim(), sendRole);
+      const result = await apiClient.verifyOtp(nationalNumber, otp.trim(), role);
       
       apiClient.setToken(result.accessToken);
       if (typeof window !== 'undefined') {
@@ -174,7 +172,7 @@ export default function LoginPage() {
 
                 <button
                   type="button"
-                  onClick={() => selectDemoProfile('9991587148', 'ADMIN')}
+                  onClick={() => selectDemoProfile('9999999999', 'ADMIN')}
                   className="flex w-full items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/20"
                 >
                   <div className="flex items-center gap-2">
