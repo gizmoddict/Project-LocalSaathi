@@ -224,21 +224,21 @@ export default function EmployerBookingsPage() {
                     <p className="text-sm text-slate-600">
                       Worker:{' '}
                       <span className="font-semibold text-slate-800">
-                        {booking.workerName}
+                        {booking.workerName || 'Assigned Worker'}
                       </span>{' '}
-                      • Category: {booking.jobCategory}
+                      • Category: {booking.jobCategory || 'General'}
                     </p>
                   </div>
 
                   <div className="text-right">
                     <div className="text-lg font-bold text-slate-900 flex items-center justify-end gap-1">
                       <IndianRupee className="w-4 h-4" />
-                      {booking.totalAmount.toLocaleString('en-IN')}
+                      {(booking.totalAmount ?? booking.agreedWage ?? (booking as any).wageAmount ?? 0).toLocaleString('en-IN')}
                     </div>
                     <p className="text-xs text-slate-500">
-                      ₹{booking.agreedWage}/{booking.wageType.toLowerCase()} •{' '}
-                      {booking.durationDays}{' '}
-                      {booking.durationDays === 1 ? 'day' : 'days'}
+                      ₹{booking.agreedWage ?? (booking as any).wageAmount ?? 0}/{(booking.wageType || 'DAILY').toLowerCase()} •{' '}
+                      {booking.durationDays ?? 1}{' '}
+                      {(booking.durationDays ?? 1) === 1 ? 'day' : 'days'}
                     </p>
                   </div>
                 </div>
@@ -261,8 +261,8 @@ export default function EmployerBookingsPage() {
                     <MapPin className="w-4 h-4 text-slate-400" />
                     <span>
                       {booking.workLocationLocality
-                        ? `${booking.workLocationLocality}, ${booking.workLocationCity}`
-                        : 'Location on file'}
+                        ? `${booking.workLocationLocality}${booking.workLocationCity ? `, ${booking.workLocationCity}` : ''}`
+                        : (booking as any).locality || 'Location on file'}
                     </span>
                   </div>
                 </div>

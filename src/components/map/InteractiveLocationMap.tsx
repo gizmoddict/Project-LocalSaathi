@@ -353,10 +353,10 @@ export function InteractiveLocationMap({
         popupContent.className = 'p-1 text-slate-800 text-xs font-sans';
         popupContent.innerHTML = `
           <div style="font-weight: 700; font-size: 13px; margin-bottom: 2px; color: #18382c;">${escapeHtml(job.title)}</div>
-          <div style="color: #64748b; margin-bottom: 6px;">🏢 ${escapeHtml(job.employer.businessName)} • 📍 ${escapeHtml(job.location.locality || job.location.city)}</div>
+          <div style="color: #64748b; margin-bottom: 6px;">🏢 ${escapeHtml(job.employer?.businessName || (job as any).employerBusinessName || 'Hiring Employer')} • 📍 ${escapeHtml(job.location?.locality || job.location?.city || (job as any).locality || 'Location on file')}</div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-weight: 800; font-size: 14px; color: #173b2f;">₹${job.wageAmount} <span style="font-size: 10px; font-weight: normal; color: #64748b;">/${job.wageType.toLowerCase()}</span></span>
-            <span style="background: #edf4ed; color: #28734f; padding: 2px 6px; border-radius: 12px; font-size: 10px; font-weight: 600;">${job.distanceKm} km away</span>
+            <span style="font-weight: 800; font-size: 14px; color: #173b2f;">₹${job.wageAmount ?? 0} <span style="font-size: 10px; font-weight: normal; color: #64748b;">/${(job.wageType || 'DAILY').toLowerCase()}</span></span>
+            <span style="background: #edf4ed; color: #28734f; padding: 2px 6px; border-radius: 12px; font-size: 10px; font-weight: 600;">${job.distanceKm ?? 0} km away</span>
           </div>
           <div style="display: flex; gap: 4px;">
             <button id="view-job-${job.id}" style="width: 100%; background: #173b2f; color: #ffffff; padding: 5px 8px; border-radius: 6px; border: none; font-size: 11px; font-weight: 700; cursor: pointer;">

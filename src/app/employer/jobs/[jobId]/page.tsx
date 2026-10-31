@@ -369,9 +369,11 @@ export default function JobDetailsPage() {
                   {job.location.locality}, {job.location.city}, {job.location.state} -{' '}
                   <span className="font-semibold">{job.location.pinCode}</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Coordinates: {job.location.latitude.toFixed(4)}, {job.location.longitude.toFixed(4)}
-                </p>
+                {typeof job.location.latitude === 'number' && typeof job.location.longitude === 'number' && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Coordinates: {job.location.latitude.toFixed(4)}, {job.location.longitude.toFixed(4)}
+                  </p>
+                )}
               </div>
             </div>
           )}

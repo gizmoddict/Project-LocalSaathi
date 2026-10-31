@@ -732,11 +732,12 @@ export default function WorkerJobDiscoveryPage() {
                     {/* Employer & Locality */}
                     <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="font-semibold text-slate-700">
-                        🏢 {job.employer.businessName}
+                        🏢 {job.employer?.businessName || (job as any).employerBusinessName || 'Hiring Employer'}
                       </span>
                       <span>•</span>
                       <span>
-                        📌 {job.location.locality}, {job.location.city}
+                        📌 {job.location?.locality || (job as any).locality || 'Location on file'}
+                        {job.location?.city ? `, ${job.location.city}` : ''}
                       </span>
                       <span>•</span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">

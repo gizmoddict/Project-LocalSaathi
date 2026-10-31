@@ -17,6 +17,36 @@ export interface GeocodingResult {
 // Curated verified trade hubs across North India for offline resilience & instant suggestions
 export const FALLBACK_GEOCODING_DATABASE: GeocodingResult[] = [
   {
+    latitude: 26.8858,
+    longitude: 81.0585,
+    displayName: 'BBD University (Babu Banarasi Das), Faizabad Road, Lucknow, Uttar Pradesh 226028',
+    addressLine: 'BBD Campus, Faizabad Road',
+    locality: 'BBD University (Tiwariganj)',
+    city: 'Lucknow',
+    state: 'Uttar Pradesh',
+    pinCode: '226028',
+  },
+  {
+    latitude: 26.8826,
+    longitude: 81.0584,
+    displayName: 'Tiwariganj, Faizabad Road, Lucknow, Uttar Pradesh 226028',
+    addressLine: 'Faizabad Road',
+    locality: 'Tiwariganj',
+    city: 'Lucknow',
+    state: 'Uttar Pradesh',
+    pinCode: '226028',
+  },
+  {
+    latitude: 26.8800,
+    longitude: 81.0400,
+    displayName: 'Chinhat, Lucknow, Uttar Pradesh 226028',
+    addressLine: 'Chinhat Tiraha, Faizabad Road',
+    locality: 'Chinhat',
+    city: 'Lucknow',
+    state: 'Uttar Pradesh',
+    pinCode: '226028',
+  },
+  {
     latitude: 26.8500,
     longitude: 80.9480,
     displayName: 'Hazratganj, Lucknow, Uttar Pradesh 226001',
@@ -162,6 +192,22 @@ export async function searchPlaces(query: string): Promise<GeocodingResult[]> {
     );
   });
 
+  // 1. Try Next.js internal server-side proxy when running in browser (bypasses CORS & rate limits)
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyRes = await fetch(`/api/v1/geocoding/search?q=${encodeURIComponent(trimmed)}`);
+      if (proxyRes.ok) {
+        const results = await proxyRes.json();
+        if (Array.isArray(results) && results.length > 0) {
+          searchCache.set(cacheKey, { timestamp: Date.now(), results });
+          return results;
+        }
+      }
+    } catch {
+      // Fall through to external / local fallback
+    }
+  }
+
   // 2. Query configured external geocoding provider
   try {
     const customBaseUrl = process.env.NEXT_PUBLIC_GEOCODING_BASE_URL;
@@ -175,12 +221,11 @@ export async function searchPlaces(query: string): Promise<GeocodingResult[]> {
     }
 
     if (endpoint) {
-      const response = await fetch(endpoint, {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'LocalSaathi-Web/1.0 (contact@localsaathi.in)',
-        },
-      });
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (typeof window === 'undefined') {
+        headers['User-Agent'] = 'LocalSaathi-Web/1.0 (contact@localsaathi.in)';
+      }
+      const response = await fetch(endpoint, { headers });
 
       if (response.ok) {
         const data = await response.json();
@@ -254,7 +299,23 @@ export async function reverseGeocode(
     return cached.result;
   }
 
-  // 1. Try external provider
+  // 1. Try Next.js internal server-side proxy when running in browser (bypasses CORS & header restrictions)
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyRes = await fetch(`/api/v1/geocoding/reverse?lat=${latitude}&lon=${longitude}`);
+      if (proxyRes.ok) {
+        const item = await proxyRes.json();
+        if (item && item.displayName && !item.error) {
+          reverseCache.set(cacheKey, { timestamp: Date.now(), result: item });
+          return item;
+        }
+      }
+    } catch {
+      // Fall through to external / local fallback
+    }
+  }
+
+  // 2. Try external provider directly
   try {
     const customBaseUrl = process.env.NEXT_PUBLIC_GEOCODING_BASE_URL;
     const provider = process.env.NEXT_PUBLIC_GEOCODING_PROVIDER || 'nominatim';
@@ -267,12 +328,11 @@ export async function reverseGeocode(
     }
 
     if (endpoint) {
-      const response = await fetch(endpoint, {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'LocalSaathi-Web/1.0 (contact@localsaathi.in)',
-        },
-      });
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (typeof window === 'undefined') {
+        headers['User-Agent'] = 'LocalSaathi-Web/1.0 (contact@localsaathi.in)';
+      }
+      const response = await fetch(endpoint, { headers });
 
       if (response.ok) {
         const item = await response.json();

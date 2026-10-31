@@ -224,17 +224,21 @@ export class ApiClient {
     }
   }
 
-  async requestOtp(phone: string, role: 'WORKER' | 'EMPLOYER' | 'ADMIN'): Promise<{ success: boolean; message: string }> {
+  async requestOtp(identifier: string, role: 'WORKER' | 'EMPLOYER' | 'ADMIN', intent: 'login' | 'signup' = 'login', identifierType: 'phone' | 'email' = 'phone', accountPhone?: string): Promise<{ success: boolean; message: string }> {
     return this.request('/auth/otp/request', {
       method: 'POST',
-      body: JSON.stringify({ phone, role }),
+      body: JSON.stringify({ [identifierType]: identifier, ...(identifierType === 'email' ? { phone: accountPhone } : {}), identifierType, role, intent }),
     });
   }
 
   async verifyOtp(
     phone: string,
     otp: string,
-    role: 'WORKER' | 'EMPLOYER' | 'ADMIN'
+    role: 'WORKER' | 'EMPLOYER' | 'ADMIN',
+    intent: 'login' | 'signup' = 'login',
+    profile?: Record<string, unknown>,
+    identifierType: 'phone' | 'email' = 'phone',
+    accountPhone?: string
   ): Promise<{
     accessToken: string;
     user: {
@@ -248,12 +252,23 @@ export class ApiClient {
     return this.request('/auth/otp/verify', {
       method: 'POST',
       body: JSON.stringify({
-        phone,
+        [identifierType]: phone,
+        ...(identifierType === 'email' ? { phone: accountPhone } : {}),
+        identifierType,
         otp,
         role,
+        intent,
+        profile,
         deviceInfo: typeof navigator !== 'undefined' ? navigator.userAgent : 'web',
       }),
     });
+  }
+
+  async demoLogin(role: 'WORKER' | 'EMPLOYER' | 'ADMIN'): Promise<{
+    accessToken: string;
+    user: { id: string; role: UserRole; accountStatus: AccountStatus; verificationStatus: VerificationStatus; createdAt: string };
+  }> {
+    return this.request('/auth/demo', { method: 'POST', body: JSON.stringify({ role }) });
   }
 
   async getMe(): Promise<{

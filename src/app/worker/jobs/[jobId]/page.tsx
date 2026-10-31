@@ -114,9 +114,54 @@ export default function WorkerJobDetailPage() {
     );
   }
 
-  const { match, breakdown } = { match: job.match, breakdown: job.match.breakdown };
-  const isHighMatch = match.score >= 80;
-  const isMediumMatch = match.score >= 50 && match.score < 80;
+  const match = job.match ?? {
+    score: 0,
+    eligible: false,
+    reasons: [],
+    breakdown: {
+      distanceScore: 0,
+      distanceKm: job.distanceKm ?? 0,
+      skillScore: 0,
+      matchedSkillsCount: 0,
+      totalRequiredSkillsCount: job.requiredSkills?.length ?? 0,
+      experienceScore: 0,
+      experienceMet: false,
+      availabilityScore: 0,
+      availabilityCompatible: false,
+      wageScore: 0,
+      wageCompatible: null,
+    },
+  };
+  const breakdown = match.breakdown ?? {
+    distanceScore: 0,
+    distanceKm: job.distanceKm ?? 0,
+    skillScore: 0,
+    matchedSkillsCount: 0,
+    totalRequiredSkillsCount: job.requiredSkills?.length ?? 0,
+    experienceScore: 0,
+    experienceMet: false,
+    availabilityScore: 0,
+    availabilityCompatible: false,
+    wageScore: 0,
+    wageCompatible: null,
+  };
+  const isHighMatch = (match.score ?? 0) >= 80;
+  const isMediumMatch = (match.score ?? 0) >= 50 && (match.score ?? 0) < 80;
+
+  const skillList =
+    job.skillDetails && job.skillDetails.length > 0
+      ? job.skillDetails
+      : (job.requiredSkills || []).map((s) => ({
+          skillId: s.skillId,
+          name: s.name,
+          category: s.category,
+          isRequired: s.isRequired,
+          minExperienceYears: s.minExperienceYears || 0,
+          workerHasSkill: true,
+          workerProficiency: 'INTERMEDIATE',
+          workerExperienceYears: s.minExperienceYears || 2,
+          experienceMet: true,
+        }));
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -155,17 +200,20 @@ export default function WorkerJobDetailPage() {
                 {job.title}
               </h1>
               <div className="text-sm text-slate-600">
-                Posted by <span className="font-semibold text-slate-800">{job.employer.businessName}</span> in{' '}
-                <span className="text-slate-800">{job.location.locality}, {job.location.city}</span>
+                Posted by <span className="font-semibold text-slate-800">{job.employer?.businessName || (job as any).employerBusinessName || 'Hiring Employer'}</span> in{' '}
+                <span className="text-slate-800">
+                  {job.location?.locality || (job as any).locality || 'Location on file'}
+                  {job.location?.city ? `, ${job.location.city}` : ''}
+                </span>
               </div>
             </div>
 
             <div className="text-left sm:text-right shrink-0 bg-slate-50 sm:bg-transparent p-4 sm:p-0 rounded-xl sm:rounded-none">
               <div className="text-2xl sm:text-3xl font-black text-slate-900">
-                ₹{job.wageAmount.toLocaleString('en-IN')}
+                ₹{(job.wageAmount ?? 0).toLocaleString('en-IN')}
               </div>
               <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                per {job.wageType.toLowerCase()}
+                per {(job.wageType || 'DAILY').toLowerCase()}
               </div>
               <div className="text-xs text-slate-400 mt-1">
                 📅 Duration: {job.durationDays} day(s)
@@ -432,7 +480,7 @@ export default function WorkerJobDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {job.skillDetails.map((s) => (
+                {skillList.map((s) => (
                   <tr key={s.skillId} className="hover:bg-slate-50/50">
                     <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
                     <td className="px-4 py-3 text-slate-500">{s.category}</td>
@@ -475,7 +523,7 @@ export default function WorkerJobDetailPage() {
               {job.description}
             </p>
 
-            {job.requirements.length > 0 && (
+            {(job.requirements && job.requirements.length > 0) && (
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <h3 className="text-xs font-bold text-slate-600 uppercase">Special Requirements</h3>
                 <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
@@ -507,8 +555,9 @@ export default function WorkerJobDetailPage() {
                 <div>
                   <div className="font-semibold text-slate-800">Location</div>
                   <div className="text-slate-600 text-xs">
-                    {job.location.addressLine ? `${job.location.addressLine}, ` : ''}
-                    {job.location.locality}, {job.location.city}, {job.location.state} — {job.location.pinCode}
+                    {job.location
+                      ? `${job.location.addressLine ? `${job.location.addressLine}, ` : ''}${job.location.locality || ''}, ${job.location.city || ''}${job.location.state ? `, ${job.location.state}` : ''}${job.location.pinCode ? ` — ${job.location.pinCode}` : ''}`
+                      : (job as any).locality || 'Location on file'}
                   </div>
                   <div className="text-blue-600 font-medium text-xs mt-0.5">
                     {job.distanceKm} km from your registered base
@@ -521,10 +570,10 @@ export default function WorkerJobDetailPage() {
                 <div>
                   <div className="font-semibold text-slate-800">Employer Organization</div>
                   <div className="text-slate-600 text-xs">
-                    {job.employer.businessName} ({job.employer.businessType || 'Direct Employer'})
+                    {job.employer?.businessName || 'Employer'} ({job.employer?.businessType || 'Direct Employer'})
                   </div>
                   <div className="text-slate-400 text-xs">
-                    Total jobs posted: {job.employer.totalJobsPosted}
+                    Total jobs posted: {job.employer?.totalJobsPosted ?? 1}
                   </div>
                 </div>
               </div>

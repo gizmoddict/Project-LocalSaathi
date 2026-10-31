@@ -185,14 +185,14 @@ export default function WorkerBookingDetailPage() {
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div>
                 <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
-                  Contract Agreement #{booking.id.slice(0, 8)}
+                  Contract Agreement #{(booking.id || '').slice(0, 8)}
                 </span>
                 <h1 className="text-2xl font-bold text-slate-900 mt-1">
                   {booking.jobTitle}
                 </h1>
                 <p className="text-sm text-slate-600 mt-1 flex items-center gap-2">
                   <Briefcase className="w-4 h-4 text-slate-400" />
-                  Category: {booking.jobCategory}
+                  Category: {booking.jobCategory || 'General'}
                 </p>
               </div>
 
@@ -200,11 +200,11 @@ export default function WorkerBookingDetailPage() {
                 <span className="text-xs text-slate-500">Total Agreed Payment</span>
                 <div className="text-2xl font-bold text-slate-900 flex items-center sm:justify-end gap-1">
                   <IndianRupee className="w-5 h-5" />
-                  {booking.totalAmount.toLocaleString('en-IN')}
+                  {(booking.totalAmount ?? booking.agreedWage ?? (booking as any).wageAmount ?? 0).toLocaleString('en-IN')}
                 </div>
                 <p className="text-xs text-slate-500">
-                  ₹{booking.agreedWage} / {booking.wageType.toLowerCase()} • {booking.durationDays}{' '}
-                  {booking.durationDays === 1 ? 'day' : 'days'}
+                  ₹{booking.agreedWage ?? (booking as any).wageAmount ?? 0} / {(booking.wageType || 'DAILY').toLowerCase()} • {booking.durationDays ?? 1}{' '}
+                  {(booking.durationDays ?? 1) === 1 ? 'day' : 'days'}
                 </p>
               </div>
             </div>
@@ -217,13 +217,13 @@ export default function WorkerBookingDetailPage() {
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
                 <Building className="w-4 h-4 text-indigo-500" /> Hiring Employer
               </h3>
-              <p className="text-base font-bold text-slate-900">{booking.employer.businessName}</p>
+              <p className="text-base font-bold text-slate-900">{booking.employer?.businessName || booking.employerName || 'Hiring Employer'}</p>
               <p className="text-xs text-slate-600 mt-1">
-                Business Type: {booking.employer.businessType || 'General Enterprise'}
+                Business Type: {booking.employer?.businessType || 'General Enterprise'}
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                {booking.employer.locality ? `${booking.employer.locality}, ` : ''}
-                {booking.employer.city || ''}
+                {booking.employer?.locality ? `${booking.employer.locality}, ` : ''}
+                {booking.employer?.city || ''}
               </p>
             </div>
 
@@ -255,7 +255,8 @@ export default function WorkerBookingDetailPage() {
               </h3>
               <p className="text-sm font-medium text-slate-800">
                 {booking.workLocationAddress ? `${booking.workLocationAddress}, ` : ''}
-                {booking.workLocationLocality}, {booking.workLocationCity}
+                {booking.workLocationLocality || (booking as any).locality || 'Work site location'}
+                {booking.workLocationCity ? `, ${booking.workLocationCity}` : ''}
                 {booking.workLocationState ? `, ${booking.workLocationState}` : ''}
                 {booking.workLocationPinCode ? ` - ${booking.workLocationPinCode}` : ''}
               </p>

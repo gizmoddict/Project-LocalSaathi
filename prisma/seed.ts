@@ -13,6 +13,16 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log('Seeding LocalSaathi database with realistic development fixtures...');
 
+  if (process.env.DEMO_ACCOUNTS_ENABLED === 'true') {
+    await prisma.user.upsert({
+      where: { phone: '9999999999' },
+      update: {},
+      create: { phone: '9999999999', role: UserRole.ADMIN, accountStatus: 'ACTIVE' },
+    });
+    // eslint-disable-next-line no-console
+    console.log('Seeded the explicitly enabled demonstration administrator account.');
+  }
+
   // 1. Seed Skills
   const skillsData = [
     { name: 'Plumbing', normalizedName: 'plumbing', category: 'Plumbing' },
