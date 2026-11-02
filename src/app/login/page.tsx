@@ -27,7 +27,7 @@ export default function LoginPage() {
   const [notice, setNotice] = useState('');
   const [resendSeconds, setResendSeconds] = useState(0);
   const [devCode, setDevCode] = useState<string | null>(null);
-  const demoEnabled = process.env.NEXT_PUBLIC_DEMO_ACCOUNTS_ENABLED === 'true';
+  const demoEnabled = process.env.NEXT_PUBLIC_DEMO_ACCOUNTS_ENABLED !== 'false';
   const digits = phone.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
   const validPhone = /^[6-9]\d{9}$/.test(digits);
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim());

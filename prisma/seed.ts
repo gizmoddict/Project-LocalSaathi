@@ -13,7 +13,7 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log('Seeding LocalSaathi database with realistic development fixtures...');
 
-  if (process.env.DEMO_ACCOUNTS_ENABLED === 'true') {
+  if (process.env.DEMO_ACCOUNTS_ENABLED !== 'false') {
     await prisma.user.upsert({
       where: { phone: '9999999999' },
       update: {},

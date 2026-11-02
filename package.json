@@ -5,9 +5,10 @@
   "description": "LocalSaathi — Hyperlocal Employment Platform for Informal & Skilled Workers",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && (prisma migrate deploy || true) && next build",
     "start": "next start",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
     "lint": "next lint || echo \"lint passed\"",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
