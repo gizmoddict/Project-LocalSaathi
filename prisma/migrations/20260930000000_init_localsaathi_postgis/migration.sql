@@ -5,7 +5,6 @@
 
 -- 1. Enable Spatial and UUID Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- 2. Create Enums
 CREATE TYPE "UserRole" AS ENUM ('WORKER', 'EMPLOYER', 'ADMIN', 'MODERATOR', 'SUPPORT');
@@ -166,7 +165,6 @@ CREATE TABLE "job_locations" (
     "job_post_id" UUID NOT NULL,
     "latitude" DOUBLE PRECISION NOT NULL,
     "longitude" DOUBLE PRECISION NOT NULL,
-    "location" geography(Point, 4326),
     "address_line" VARCHAR(255),
     "locality" VARCHAR(100) NOT NULL,
     "city" VARCHAR(100) NOT NULL,
@@ -186,7 +184,6 @@ CREATE TABLE "worker_locations" (
     "worker_profile_id" UUID NOT NULL,
     "latitude" DOUBLE PRECISION NOT NULL,
     "longitude" DOUBLE PRECISION NOT NULL,
-    "location" geography(Point, 4326),
     "accuracy_meters" DOUBLE PRECISION,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -533,26 +530,6 @@ CREATE INDEX "user_devices_user_id_platform_idx" ON "user_devices"("user_id", "p
 CREATE INDEX "search_index_events_status_available_at_idx" ON "search_index_events"("status", "available_at" ASC);
 CREATE INDEX "search_index_events_entity_type_entity_id_idx" ON "search_index_events"("entity_type", "entity_id");
 
--- 6. PostGIS Spatial GiST Indexes
-CREATE INDEX "idx_job_locations_location_gist" ON "job_locations" USING GIST ("location");
-CREATE INDEX "idx_worker_locations_location_gist" ON "worker_locations" USING GIST ("location");
-
--- 7. PostGIS Synchronization Triggers
--- Automatically populates location geography from longitude & latitude upon INSERT/UPDATE
-CREATE OR REPLACE FUNCTION fn_sync_point_location()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.latitude IS NOT NULL AND NEW.longitude IS NOT NULL THEN
-        NEW.location := ST_SetSRID(ST_MakePoint(NEW.longitude, NEW.latitude), 4326)::geography;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_sync_job_location
-BEFORE INSERT OR UPDATE OF latitude, longitude ON "job_locations"
-FOR EACH ROW EXECUTE FUNCTION fn_sync_point_location();
-
-CREATE TRIGGER trg_sync_worker_location
-BEFORE INSERT OR UPDATE OF latitude, longitude ON "worker_locations"
-FOR EACH ROW EXECUTE FUNCTION fn_sync_point_location();
+-- 6. Spatial Coordinate Indexes (Standard B-Tree for Lat/Lon)
+CREATE INDEX "idx_job_locations_lat_lon" ON "job_locations"("latitude", "longitude");
+CREATE INDEX "idx_worker_locations_lat_lon" ON "worker_locations"("latitude", "longitude");

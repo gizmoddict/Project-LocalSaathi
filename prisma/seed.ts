@@ -2,8 +2,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 
 // Load environment variables from repository root
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
 
 import { PrismaClient, UserRole, WageType, JobStatus, JobUrgency, AvailabilityStatus, ApplicationStatus } from '@prisma/client';
 

@@ -12,7 +12,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [postgis, uuidOssp(map: "uuid-ossp")]
+  extensions = [uuidOssp(map: "uuid-ossp")]
 }
 
 // ------------------------------------------------------------------------------
@@ -618,22 +618,22 @@ model JobRequiredSkill {
 // ------------------------------------------------------------------------------
 
 model JobLocation {
-  id          String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jobPostId   String                                @unique @map("job_post_id") @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobPostId   String   @unique @map("job_post_id") @db.Uuid
   latitude    Float
   longitude   Float
-  location    Unsupported("geography(Point, 4326)")?
-  addressLine String?                               @map("address_line") @db.VarChar(255)
-  locality    String                                @db.VarChar(100)
-  city        String                                @db.VarChar(100)
-  state       String                                @db.VarChar(100)
-  pinCode     String                                @map("pin_code") @db.VarChar(10)
-  createdAt   DateTime                              @default(now()) @map("created_at")
-  updatedAt   DateTime                              @updatedAt @map("updated_at")
+  addressLine String?  @map("address_line") @db.VarChar(255)
+  locality    String   @db.VarChar(100)
+  city        String   @db.VarChar(100)
+  state       String   @db.VarChar(100)
+  pinCode     String   @map("pin_code") @db.VarChar(10)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relationships
   jobPost JobPost @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
 
+  @@index([latitude, longitude])
   @@index([city, locality])
   @@map("job_locations")
 }
@@ -643,23 +643,23 @@ model JobLocation {
 // ------------------------------------------------------------------------------
 
 model WorkerLocation {
-  id              String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workerProfileId String                                @unique @map("worker_profile_id") @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerProfileId String   @unique @map("worker_profile_id") @db.Uuid
   latitude        Float
   longitude       Float
-  location        Unsupported("geography(Point, 4326)")?
-  accuracyMeters  Float?                                @map("accuracy_meters")
-  addressLine     String?                               @map("address_line") @db.VarChar(255)
-  locality        String?                               @db.VarChar(100)
-  city            String?                               @db.VarChar(100)
-  state           String?                               @db.VarChar(100)
-  pinCode         String?                               @map("pin_code") @db.VarChar(10)
-  isActive        Boolean                               @default(true) @map("is_active")
-  updatedAt       DateTime                              @updatedAt @map("updated_at")
+  accuracyMeters  Float?   @map("accuracy_meters")
+  addressLine     String?  @map("address_line") @db.VarChar(255)
+  locality        String?  @db.VarChar(100)
+  city            String?  @db.VarChar(100)
+  state           String?  @db.VarChar(100)
+  pinCode         String?  @map("pin_code") @db.VarChar(10)
+  isActive        Boolean  @default(true) @map("is_active")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relationships
   workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
 
+  @@index([latitude, longitude])
   @@index([city, locality])
   @@index([isActive, updatedAt(sort: Desc)])
   @@map("worker_locations")
