@@ -31,6 +31,10 @@ build
 out
 *.tsbuildinfo
 
+# Legacy Monorepo Workspaces (standalone root Next.js build)
+apps/
+packages/
+
 # Test Coverage & Logs
 coverage
 *.log
