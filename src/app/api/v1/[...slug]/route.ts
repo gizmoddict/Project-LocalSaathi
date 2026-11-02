@@ -66,22 +66,7 @@ function toJobResponse(job: any) {
       workerExperienceYears: 2,
       experienceMet: true,
     })),
-    location: job.jobLocation
-      ? {
-          ...job.jobLocation,
-          latitude: Number(job.jobLocation.latitude || 26.8467),
-          longitude: Number(job.jobLocation.longitude || 80.9462),
-        }
-      : job.location || {
-          id: `fallback-loc-${job.id || 'default'}`,
-          jobPostId: job.id || '',
-          locality: job.employerProfile?.locality || 'Hazratganj',
-          city: job.employerProfile?.city || 'Lucknow',
-          state: 'Uttar Pradesh',
-          pinCode: '226001',
-          latitude: 26.8467,
-          longitude: 80.9462,
-        },
+    location: job.jobLocation || null,
     employer: job.employerProfile ? {
       businessName: job.employerProfile.businessName,
       businessType: job.employerProfile.businessType,
@@ -966,30 +951,7 @@ export async function POST(
         expiresAt: null,
         createdAt: now,
         updatedAt: now,
-        location: data.location
-          ? {
-              ...data.location,
-              id: `demo-location-${id}`,
-              jobPostId: id,
-              addressLine: data.location.addressLine ?? null,
-              locality: data.location.locality || 'Hazratganj',
-              city: data.location.city || 'Lucknow',
-              state: data.location.state || 'Uttar Pradesh',
-              pinCode: data.location.pinCode || '226001',
-              latitude: Number(data.location.latitude || 26.8467),
-              longitude: Number(data.location.longitude || 80.9462),
-            }
-          : {
-              id: `demo-location-${id}`,
-              jobPostId: id,
-              addressLine: null,
-              locality: 'Hazratganj',
-              city: 'Lucknow',
-              state: 'Uttar Pradesh',
-              pinCode: '226001',
-              latitude: 26.8467,
-              longitude: 80.9462,
-            },
+        location: data.location ? { ...data.location, id: `demo-location-${id}`, jobPostId: id, addressLine: data.location.addressLine ?? null } : null,
         employer: {
           id: 'employer-demo-1',
           businessName: DEMO_EMPLOYER_PROFILE.businessName,
