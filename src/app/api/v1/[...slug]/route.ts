@@ -295,8 +295,8 @@ export async function GET(
             addr.state_district ||
             addr.county ||
             addr.city_district ||
-            'Lucknow';
-          const state = addr.state || 'Uttar Pradesh';
+            'Local Area';
+          const state = addr.state || '';
           const pinCode = addr.postcode || '';
           const addressLine = addr.road || addr.amenity || locality;
 
@@ -347,8 +347,8 @@ export async function GET(
       longitude: numLon,
       displayName: `Selected Location (${numLat.toFixed(4)}, ${numLon.toFixed(4)})`,
       locality: 'Selected Location',
-      city: 'Lucknow',
-      state: 'Uttar Pradesh',
+      city: 'Local Area',
+      state: '',
     });
   }
 
@@ -1194,7 +1194,8 @@ export async function POST(
       if (['P1000', 'P1001', 'P1002', 'P1010', 'P1017', 'P2021', 'P2022'].includes(code)) {
         return NextResponse.json({ message: 'The account database is unavailable. Start PostgreSQL and apply the Prisma migrations, then try again.' }, { status: 503 });
       }
-      throw error;
+      console.error('OTP request failed:', error);
+      return NextResponse.json({ message: 'Sign-in is temporarily unavailable. Check that PostgreSQL is running and its Prisma migrations are applied, then try again.' }, { status: 503 });
     }
   }
 
@@ -1304,17 +1305,44 @@ export async function POST(
     if (process.env.DEMO_ACCOUNTS_ENABLED !== 'true') return NextResponse.json({ message: 'Demo accounts are disabled in this environment.' }, { status: 403 });
     if (!['WORKER', 'EMPLOYER', 'ADMIN'].includes(role)) return NextResponse.json({ message: 'Select a valid demonstration profile.' }, { status: 400 });
     const phone = role === 'WORKER' ? '9123456780' : role === 'EMPLOYER' ? '9876543210' : '9999999999';
-    const user = await prisma.user.findUnique({ where: { phone } });
-    if (!user || user.role !== role || user.accountStatus !== 'ACTIVE') return NextResponse.json({ message: 'Demo account is not seeded in this database.' }, { status: 404 });
-    const refreshToken = crypto.randomBytes(40).toString('hex');
-    const session = await prisma.session.create({ data: {
-      userId: user.id, sessionTokenHash: crypto.createHmac('sha256', authPepper()).update(refreshToken).digest('hex'),
-      deviceInfo: 'LocalSaathi demo', ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.slice(0, 45) || '127.0.0.1',
-      userAgent: req.headers.get('user-agent')?.slice(0, 255) || 'Unknown', expiresAt: new Date(Date.now() + 7 * 86400000), lastUsedAt: new Date(),
-    } });
-    const response = NextResponse.json({ accessToken: signAuthToken({ sub: user.id, sessionId: session.id, role: user.role }), user: { id: user.id, role: user.role, accountStatus: user.accountStatus, verificationStatus: user.verificationStatus, createdAt: user.createdAt.toISOString() } });
-    response.cookies.set('localsaathi_refresh', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/api/v1/auth', maxAge: 7 * 86400 });
-    return response;
+    const localDemoUser = role === 'WORKER' ? DEMO_WORKER : role === 'EMPLOYER' ? DEMO_EMPLOYER : DEMO_ADMIN;
+    const allowLocalFallback = process.env.NODE_ENV !== 'production' && process.env.DEMO_ACCOUNTS_ENABLED === 'true';
+    const localDemoResponse = () => NextResponse.json({
+      accessToken: signAuthToken({ sub: localDemoUser.id, role: localDemoUser.role, demo: true }),
+      user: localDemoUser,
+    });
+
+    try {
+      const user = await prisma.user.findUnique({ where: { phone } });
+      if (!user || user.role !== role || user.accountStatus !== 'ACTIVE') {
+        return allowLocalFallback
+          ? localDemoResponse()
+          : NextResponse.json({ message: 'Demo account is not seeded in this database.' }, { status: 404 });
+      }
+      const refreshToken = crypto.randomBytes(40).toString('hex');
+      const session = await prisma.session.create({ data: {
+        userId: user.id, sessionTokenHash: crypto.createHmac('sha256', authPepper()).update(refreshToken).digest('hex'),
+        deviceInfo: 'LocalSaathi demo', ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.slice(0, 45) || '127.0.0.1',
+        userAgent: req.headers.get('user-agent')?.slice(0, 255) || 'Unknown', expiresAt: new Date(Date.now() + 7 * 86400000), lastUsedAt: new Date(),
+      } });
+      const response = NextResponse.json({ accessToken: signAuthToken({ sub: user.id, sessionId: session.id, role: user.role }), user: { id: user.id, role: user.role, accountStatus: user.accountStatus, verificationStatus: user.verificationStatus, createdAt: user.createdAt.toISOString() } });
+      response.cookies.set('localsaathi_refresh', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/api/v1/auth', maxAge: 7 * 86400 });
+      return response;
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code) : '';
+      // Local demo accounts intentionally work without a running or migrated DB.
+      // Keep this fallback confined to non-production environments with the
+      // explicit demo flag enabled; production always requires persisted sessions.
+      if (allowLocalFallback) {
+        console.warn(`Using local demo login because database session creation failed${code ? ` (${code})` : ''}.`);
+        return localDemoResponse();
+      }
+      if (['P1000', 'P1001', 'P1002', 'P1010', 'P1017'].includes(code)) {
+        return NextResponse.json({ message: 'The account database is unavailable. Start PostgreSQL and apply the Prisma migrations, then try again.' }, { status: 503 });
+      }
+      console.error('Failed to create demo login session:', error);
+      return NextResponse.json({ message: 'Could not start a demo session. Please try again.' }, { status: 500 });
+    }
   }
 
   if (slugPath === 'auth/refresh') {

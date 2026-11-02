@@ -290,13 +290,15 @@ export async function reverseGeocode(
   latitude: number,
   longitude: number
 ): Promise<GeocodingResult> {
-  const latRound = latitude.toFixed(4);
-  const lonRound = longitude.toFixed(4);
+  // Keep reverse-geocode cache entries specific enough to avoid returning a
+  // previous nearby coordinate as the selected location.
+  const latRound = latitude.toFixed(6);
+  const lonRound = longitude.toFixed(6);
   const cacheKey = `${latRound},${lonRound}`;
 
   const cached = reverseCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.result;
+    return { ...cached.result, latitude, longitude };
   }
 
   // 1. Try Next.js internal server-side proxy when running in browser (bypasses CORS & header restrictions)

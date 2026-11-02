@@ -34,8 +34,9 @@ export interface UseDeviceLocationResult {
 
 import { useState, useCallback, useEffect } from 'react';
 
-const DEFAULT_TIMEOUT_MS = 12000;
-const DEFAULT_MAX_AGE_MS = 60000; // 1 minute cache
+const DEFAULT_TIMEOUT_MS = 20000;
+// A user explicitly asking for their location should not get a stale browser cache.
+const DEFAULT_MAX_AGE_MS = 0;
 
 export function useDeviceLocation(options: UseDeviceLocationOptions = {}): UseDeviceLocationResult {
   const {

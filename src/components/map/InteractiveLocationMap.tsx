@@ -83,18 +83,20 @@ export function InteractiveLocationMap({
     latitude: defaultLat,
     longitude: defaultLon,
   });
+  const currentCoordsRef = useRef(currentCoords);
+  currentCoordsRef.current = currentCoords;
 
   const [selectedAddress, setSelectedAddress] = useState<GeocodingResult>({
     latitude: defaultLat,
     longitude: defaultLon,
     displayName: savedLocation?.locality
       ? `${savedLocation.locality}, ${savedLocation.city || ''}`
-      : 'Hazratganj, Lucknow, Uttar Pradesh',
-    locality: savedLocation?.locality || 'Hazratganj',
-    city: savedLocation?.city || 'Lucknow',
-    state: savedLocation?.state || 'Uttar Pradesh',
-    pinCode: savedLocation?.pinCode || '226001',
-    addressLine: savedLocation?.addressLine || 'Hazratganj Market',
+      : 'Use GPS or choose an area',
+    locality: savedLocation?.locality || 'Choose location',
+    city: savedLocation?.city || '',
+    state: savedLocation?.state || '',
+    pinCode: savedLocation?.pinCode || '',
+    addressLine: savedLocation?.addressLine || '',
   });
 
   // UI state
@@ -113,7 +115,7 @@ export function InteractiveLocationMap({
     errorMessage: geoErrorMessage,
     requestLocation,
     resetStatus: resetGeoStatus,
-  } = useDeviceLocation();
+  } = useDeviceLocation({ maximumAge: 0, timeout: 20000, enableHighAccuracy: true });
 
   // Check if current selection matches saved profile location
   const isSavedLocation = Boolean(
@@ -149,6 +151,41 @@ export function InteractiveLocationMap({
     }
   }, []);
 
+  // The worker profile arrives asynchronously after the page first renders. Keep
+  // the map selection and Leaflet layers in sync with that newly loaded location.
+  useEffect(() => {
+    const location = savedLocation;
+    const lat = location?.latitude;
+    const lon = location?.longitude;
+    if (typeof lat !== 'number' || typeof lon !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    setCurrentCoords({ latitude: lat, longitude: lon });
+    setSelectedAddress({
+      latitude: lat,
+      longitude: lon,
+      displayName: [location?.locality, location?.city, location?.state].filter(Boolean).join(', ') || `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+      locality: location?.locality || 'Saved Location',
+      city: location?.city || undefined,
+      state: location?.state || undefined,
+      pinCode: location?.pinCode || undefined,
+      addressLine: location?.addressLine || undefined,
+    });
+    setHasMapMoved(false);
+    leafletMapRef.current?.setView([lat, lon], 13, { animate: true });
+    centerMarkerRef.current?.setLatLng([lat, lon]);
+    radiusCircleRef.current?.setLatLng([lat, lon]);
+  }, [
+    savedLocation?.latitude,
+    savedLocation?.longitude,
+    savedLocation?.locality,
+    savedLocation?.city,
+    savedLocation?.state,
+    savedLocation?.pinCode,
+    savedLocation?.addressLine,
+  ]);
+
   // ---------------------------------------------------------------------------
   // Leaflet Map Initialization
   // ---------------------------------------------------------------------------
@@ -169,8 +206,9 @@ export function InteractiveLocationMap({
 
       const tileConfig = getMapTileConfig();
 
+      const initialCoords = currentCoordsRef.current;
       const map = L.map(mapContainerRef.current, {
-        center: [currentCoords.latitude, currentCoords.longitude],
+        center: [initialCoords.latitude, initialCoords.longitude],
         zoom: 13,
         zoomControl: false,
       });
@@ -206,7 +244,7 @@ export function InteractiveLocationMap({
       });
 
       // Add center draggable marker
-      const marker = L.marker([currentCoords.latitude, currentCoords.longitude], {
+      const marker = L.marker([initialCoords.latitude, initialCoords.longitude], {
         icon: centerPinIcon,
         draggable: !readOnly,
         title: 'Selected Work Location (Drag to adjust)',
@@ -215,7 +253,7 @@ export function InteractiveLocationMap({
       centerMarkerRef.current = marker;
 
       // Add Radius Coverage Circle
-      const radiusCircle = L.circle([currentCoords.latitude, currentCoords.longitude], {
+      const radiusCircle = L.circle([initialCoords.latitude, initialCoords.longitude], {
         radius: radiusKm * 1000,
         color: '#28734f',
         fillColor: '#28734f',
@@ -608,7 +646,7 @@ export function InteractiveLocationMap({
       </div>
 
       {/* Permission Denied / Error Alert Bar */}
-      {(geoStatus === 'denied' || geoStatus === 'unavailable') && (
+      {(['denied', 'unavailable', 'timeout', 'unsupported'] as const).includes(geoStatus as any) && (
         <div className="absolute top-14 left-3 right-3 z-[1000] flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 shadow-md">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
