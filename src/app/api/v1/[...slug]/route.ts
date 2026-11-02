@@ -110,7 +110,14 @@ function toJobResponse(job: any) {
   };
 }
 
-const hasPersistentDatabase = () => Boolean(process.env.DATABASE_URL_POOLED || process.env.DATABASE_URL);
+const hasPersistentDatabase = () => {
+  const url = process.env.DATABASE_URL_POOLED || process.env.DATABASE_URL;
+  if (!url) return false;
+  if (process.env.NODE_ENV === 'production' && (url.includes('localhost') || url.includes('127.0.0.1'))) {
+    return false;
+  }
+  return true;
+};
 
 function listRuntimeJobs(query: Record<string, string>, publishedOnly = false) {
   let jobs = [...runtimeJobs];

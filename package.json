@@ -5,7 +5,7 @@
   "description": "LocalSaathi — Hyperlocal Employment Platform for Informal & Skilled Workers",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && (prisma migrate deploy || true) && next build",
+    "build": "prisma generate && node scripts/deploy/migrate-if-configured.js && next build",
     "start": "next start",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
