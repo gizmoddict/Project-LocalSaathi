@@ -21,6 +21,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Ensure public assets directory exists
+RUN mkdir -p /app/public
+
 # Generate Prisma Client (native + linux-musl)
 RUN npx prisma generate
 
